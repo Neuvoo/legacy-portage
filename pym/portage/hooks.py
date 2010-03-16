@@ -2,6 +2,11 @@
 # Distributed under the terms of the GNU General Public License v2
 # $Id$
 
+# TODO: following may be harmful, but helpful for debugging
+import os, sys
+import os.path as osp
+sys.path.insert(0, osp.dirname(osp.dirname(osp.abspath(__file__))))
+
 from portage.const import BASH_BINARY, HOOKS_PATH
 from portage import os
 from portage import check_config_instance
