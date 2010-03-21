@@ -17,38 +17,39 @@ class HookDirectoryTestCase(TestCase):
 		Based on test_PackageKeywordsFile.py
 		"""
 
-		tmp_dir = self.BuildTmp()
+		tmp_dirs = ['etc', 'portage', 'hooks', 'test.d']
+		tmp_dir_path = self.BuildTmp(tmp_dirs)
+		tmp_dirs = [tmp_dir_path, 'etc', 'portage', 'hooks', 'test.d']
 		try:
 			settings = config()
-			settings["PORTAGE_CONFIGROOT"] = tmp_dir
+			settings["PORTAGE_CONFIGROOT"] = tmp_dir_path
 			hooks = HookDirectory('test', settings)
 			hooks.execute()
 		finally:
-			self.NukeTmp(tmp_dir)
+			self.NukeTmp(tmp_dirs)
 	
-	def BuildTmp(self):
-		tmp_dir = mkdtemp()
-		hooks_dir = tmp_dir+'/etc'
-		os.mkdir(hooks_dir)
-		hooks_dir = hooks_dir+'/portage'
-		os.mkdir(hooks_dir)
-		hooks_dir = hooks_dir+'/hooks'
-		os.mkdir(hooks_dir)
-		hooks_dir = hooks_dir+'/test.d'
-		os.mkdir(hooks_dir)
+	def BuildTmp(self, tmp_subdirs):
+		tmp_dir_path = mkdtemp()
+		hooks_dir = tmp_dir_path
+		for tmp_subdir in tmp_subdirs:
+			hooks_dir = hooks_dir + '/' + tmp_subdir
+			os.mkdir(hooks_dir)
 		
 		f = open(hooks_dir+'/testhook', 'w')
 		f.write('#!/bin/bash\n')
 		f.write('exit 0\n')
 		f.close()
 		
-		return tmp_dir
+		return tmp_dir_path
 
-	def NukeTmp(self, tmp_dir):
-		hooks_dir = tmp_dir+'/etc/portage/hooks/test.d'
-		os.unlink(hooks_dir+'/testhook')
-		os.rmdir(tmp_dir+'/etc/portage/hooks/test.d')
-		os.rmdir(tmp_dir+'/etc/portage/hooks')
-		os.rmdir(tmp_dir+'/etc/portage')
-		os.rmdir(tmp_dir+'/etc')
-		os.rmdir(tmp_dir)
+	def NukeTmp(self, tmp_dirs):
+		tmp_dir_paths = []
+		curr_path = ''
+		for tmp_dir in tmp_dirs:
+			curr_path = curr_path + '/' + tmp_dir
+			tmp_dir_paths.append(curr_path)
+		
+		tmp_dir_paths.reverse()
+		os.unlink(curr_path+'/testhook')
+		for tmp_dir_path in tmp_dir_paths:
+			os.rmdir(tmp_dir_path)
