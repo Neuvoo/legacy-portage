@@ -18,7 +18,10 @@ from process import spawn
 
 class HookDirectory(object):
 
-	def __init__ (self, phase, settings):
+	def __init__ (self, phase, settings, myopts=None, myaction=None, myfiles=None):
+		self.myopts = myopts
+		self.myaction = myaction
+		self.myfiles = myfiles
 		check_config_instance(settings)
 		self.settings = settings
 		self.path = os.path.join(settings["PORTAGE_CONFIGROOT"], HOOKS_PATH, phase + '.d')
@@ -31,7 +34,7 @@ class HookDirectory(object):
 		path = normalize_path(path)
 		
 		if not os.path.exists(path):
-			self.output.warn('This hook path could not be found: ' + path)
+			self.output.ewarn('This hook path could not be found: ' + path)
 			return
 		
 		if os.path.isdir(path):
@@ -39,14 +42,17 @@ class HookDirectory(object):
 				for dir in dirs:
 					self.output.ewarn('Directory within hook directory not allowed: ' + path+'/'+dir)
 				for filename in files:
-					HookFile(os.path.join(path, filename), self.settings).execute()
+					HookFile(os.path.join(path, filename), self.settings, self.myopts, self.myaction, self.myfiles).execute()
 		
 		else:
 			raise InvalidLocation('This hook path ought to be a directory: ' + path)
 
 class HookFile (object):
 	
-	def __init__ (self, path, settings):
+	def __init__ (self, path, settings, myopts=None, myaction=None, myfiles=None):
+		self.myopts = myopts
+		self.myaction = myaction
+		self.myfiles = myfiles
 		check_config_instance(settings)
 		self.path = path
 		self.settings = settings
@@ -58,7 +64,17 @@ class HookFile (object):
 			raise InvalidLocation('This hook path could not be found: ' + path)
 		
 		if os.path.isfile(path):
-			code = spawn(mycommand=[BASH_BINARY, path], env=self.settings.environ())
+			command=[BASH_BINARY, path]
+			if self.myopts:
+				for myopt in myopts:
+					command.extend(['--opt', myopt])
+			if self.myaction:
+				command.extend(['--action', myaction])
+			if self.myfiles:
+				for myfile in myfiles:
+					command.extend(['--file', myfile])
+			
+			code = spawn(mycommand=command, env=self.settings.environ())
 			if code: # if failure
 				raise PortageException('!!! Hook %s failed with exit code %s' % (path, code))
 		
