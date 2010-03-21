@@ -1,4 +1,5 @@
 #!/bin/bash
+# Based on git commit ba146d138848e05eac17785c876c7ca67c0e7c1d
 
 RELEASE_BUILDDIR=${RELEASE_BUILDDIR:-/var/tmp/portage-release}
 SOURCE_DIR=${RELEASE_BUILDDIR}/checkout
