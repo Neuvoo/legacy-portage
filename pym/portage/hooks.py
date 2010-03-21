@@ -7,7 +7,7 @@
 #import os.path as osp
 #sys.path.insert(0, osp.dirname(osp.dirname(osp.abspath(__file__))))
 
-from portage.const import BASH_BINARY, HOOKS_PATH
+from portage.const import BASH_BINARY, HOOKS_PATH, PORTAGE_BIN_PATH
 from portage import os
 from portage import check_config_instance
 from portage import normalize_path
@@ -64,7 +64,7 @@ class HookFile (object):
 			raise InvalidLocation('This hook path could not be found: ' + path)
 		
 		if os.path.isfile(path):
-			command=[BASH_BINARY, path]
+			command=[path]
 			if self.myopts:
 				for myopt in self.myopts:
 					command.extend(['--opt', myopt])
@@ -74,6 +74,7 @@ class HookFile (object):
 				for myfile in self.myfiles:
 					command.extend(['--file', myfile])
 			
+			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && ' + ' '.join(command)]
 			code = spawn(mycommand=command, env=self.settings.environ())
 			if code: # if failure
 				raise PortageException('!!! Hook %s failed with exit code %s' % (path, code))
