@@ -1181,9 +1181,12 @@ def emerge_main():
 	# Portage needs to ensure a sane umask for the files it creates.
 	os.umask(0o22)
 	settings, trees, mtimedb = load_emerge_config()
+	portdb = trees[settings["ROOT"]]["porttree"].dbapi
+
+	# Portage configured; let's let a hook set everything up before we do anything more
 	if "hooks" in settings['FEATURES']:
 		portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, myfiles=myfiles).execute()
-	portdb = trees[settings["ROOT"]]["porttree"].dbapi
+
 	rval = profile_check(trees, myaction)
 	if rval != os.EX_OK:
 		return rval
