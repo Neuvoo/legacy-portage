@@ -79,10 +79,9 @@ cd "${SOURCE_DIR}" || die "SOURCE_DIR doesn't exist?"
 
 if [ ! -n "${NO_REMOTE}" ]; then
 	echo ">>> Starting Git export"
-	git clone "${REPOSITORY}" || die "git clone failed"
+	git clone "${REPOSITORY}" . || die "git clone failed"
 	gitarchive_opts=""
-	[ -n "$CHANGELOG_REVISION" ] && gitarchive_opts=+="${CHANGELOG_REVISION}"
-	git archive $gitarchive_opts | tar -x -C "${SOURCE_DIR}" || die "git export failed"
+	[ -n "$CHANGELOG_REVISION" ] && ( git reset "$CHANGELOG_REVISION" || die "git reset failed" )
 fi
 
 echo ">>> Creating Changelog"
