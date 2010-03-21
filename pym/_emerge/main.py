@@ -28,6 +28,7 @@ bad = create_color_func("BAD")
 import portage.elog
 import portage.dep
 portage.dep._dep_check_strict = True
+import portage.hooks
 import portage.util
 import portage.locks
 import portage.exception
@@ -1181,7 +1182,7 @@ def emerge_main():
 	os.umask(0o22)
 	settings, trees, mtimedb = load_emerge_config()
 	if "hooks" in settings['FEATURES']:
-		HookDirectory('pre-run', settings).execute()
+		portage.hooks.HookDirectory('pre-run', settings).execute()
 	portdb = trees[settings["ROOT"]]["porttree"].dbapi
 	rval = profile_check(trees, myaction)
 	if rval != os.EX_OK:
