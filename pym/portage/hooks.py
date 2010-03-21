@@ -66,12 +66,12 @@ class HookFile (object):
 		if os.path.isfile(path):
 			command=[BASH_BINARY, path]
 			if self.myopts:
-				for myopt in myopts:
+				for myopt in self.myopts:
 					command.extend(['--opt', myopt])
 			if self.myaction:
-				command.extend(['--action', myaction])
+				command.extend(['--action', self.myaction])
 			if self.myfiles:
-				for myfile in myfiles:
+				for myfile in self.myfiles:
 					command.extend(['--file', myfile])
 			
 			code = spawn(mycommand=command, env=self.settings.environ())
