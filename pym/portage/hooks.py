@@ -31,7 +31,8 @@ class HookDirectory(object):
 		path = normalize_path(path)
 		
 		if not os.path.exists(path):
-			raise InvalidLocation('This hook path could not be found: ' + path)
+			self.output.warn('This hook path could not be found: ' + path)
+			return
 		
 		if os.path.isdir(path):
 			for parent, dirs, files in os.walk(path):
