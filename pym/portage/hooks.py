@@ -74,7 +74,7 @@ class HookFile (object):
 				for myfile in self.myfiles:
 					command.extend(['--file', myfile])
 			
-			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && ' + ' '.join(command)]
+			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && source ' + ' '.join(command)]
 			code = spawn(mycommand=command, env=self.settings.environ())
 			if code: # if failure
 				raise PortageException('!!! Hook %s failed with exit code %s' % (path, code))
