@@ -45,6 +45,7 @@ from portage.elog.messages import eerror, eqawarn
 from portage.exception import DigestException, FileNotFound, \
 	IncorrectParameter, InvalidAtom, InvalidDependString, PermissionDenied, \
 	UnsupportedAPIException
+from portage.hooks import HookDirectory
 from portage.localization import _
 from portage.manifest import Manifest
 from portage.output import style_to_ansi_code
@@ -532,13 +533,13 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		doebuild_environment(myebuild, mydo, myroot, mysettings, debug,
 			use_cache, mydbapi)
 
-		portage.hooks.HookDirectory(phase='pre-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+		HookDirectory(phase='pre-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 
 		if mydo in clean_phases:
 			retval = spawn(_shell_quote(ebuild_sh_binary) + " clean",
 				mysettings, debug=debug, fd_pipes=fd_pipes, free=1,
 				logfile=None, returnpid=returnpid)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 
 		restrict = set(mysettings.get('PORTAGE_RESTRICT', '').split())
@@ -550,7 +551,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				mypids = spawn(_shell_quote(ebuild_sh_binary) + " depend",
 					mysettings, fd_pipes=fd_pipes, returnpid=True,
 					droppriv=droppriv)
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return mypids
 			elif isinstance(dbkey, dict):
 				mysettings["dbkey"] = ""
@@ -583,7 +584,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 					# Don't trust bash's returncode if the
 					# number of lines is incorrect.
 					retval = 1
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return retval
 			elif dbkey:
 				mysettings["dbkey"] = dbkey
@@ -594,7 +595,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			retval = spawn(_shell_quote(ebuild_sh_binary) + " depend",
 				mysettings,
 				droppriv=droppriv)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 
 		# Validate dependency metadata here to ensure that ebuilds with invalid
@@ -604,7 +605,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		if not returnpid:
 			rval = _validate_deps(mysettings, myroot, mydo, mydbapi)
 			if rval != os.EX_OK:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return rval
 
 		if "PORTAGE_TMPDIR" not in mysettings or \
@@ -613,7 +614,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				"PORTAGE_TMPDIR variable, '%s',\n"
 				"does not exist.  Please create this directory or "
 				"correct your PORTAGE_TMPDIR setting.\n") % mysettings.get("PORTAGE_TMPDIR", ""), noiselevel=-1)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 1
 		
 		# as some people use a separate PORTAGE_TMPDIR mount
@@ -628,7 +629,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			writemsg(_("%s is not writable.\n"
 				"Likely cause is that you've mounted it as readonly.\n") % checkdir,
 				noiselevel=-1)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 1
 		else:
 			fd = tempfile.NamedTemporaryFile(prefix="exectest-", dir=checkdir)
@@ -640,7 +641,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 					"Please make sure that portage can execute files in this directory.\n") % checkdir,
 					noiselevel=-1)
 				fd.close()
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return 1
 			fd.close()
 		del checkdir
@@ -648,7 +649,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		if mydo == "unmerge":
 			retval = unmerge(mysettings["CATEGORY"],
 				mysettings["PF"], myroot, mysettings, vartree=vartree)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 
 		# Build directory creation isn't required for any of these.
@@ -661,7 +662,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			not (mydo == 'fetch' and 'fetch' not in restrict):
 			mystatus = prepare_build_dirs(myroot, mysettings, cleanup)
 			if mystatus:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return mystatus
 			have_build_dirs = True
 
@@ -730,7 +731,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 					for line in wrap(msg, 70):
 						eerror(line, phase="setup", key=mysettings.mycpv)
 					elog_process(mysettings.mycpv, mysettings)
-					portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+					HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 					return 1
 			del env_file, env_stat, saved_env
 			_doebuild_exit_status_unlink(
@@ -743,7 +744,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		if mydo == "help":
 			retval = spawn(_shell_quote(ebuild_sh_binary) + " " + mydo,
 				mysettings, debug=debug, free=1, logfile=logfile)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 		elif mydo == "setup":
 			retval = spawn(
@@ -751,7 +752,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				debug=debug, free=1, logfile=logfile, fd_pipes=fd_pipes,
 				returnpid=returnpid)
 			if returnpid:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return retval
 			retval = exit_status_check(retval)
 			if secpass >= 2:
@@ -760,7 +761,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				apply_recursive_permissions(mysettings["T"],
 					uid=portage_uid, gid=portage_gid, dirmode=0o70, dirmask=0,
 					filemode=0o60, filemask=0)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 		elif mydo == "preinst":
 			phase_retval = spawn(
@@ -769,7 +770,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				fd_pipes=fd_pipes, returnpid=returnpid)
 
 			if returnpid:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return phase_retval
 
 			phase_retval = exit_status_check(phase_retval)
@@ -784,7 +785,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				if phase_retval != os.EX_OK:
 					writemsg(_("!!! post preinst failed; exiting.\n"),
 						noiselevel=-1)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return phase_retval
 		elif mydo == "postinst":
 			phase_retval = spawn(
@@ -793,7 +794,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				fd_pipes=fd_pipes, returnpid=returnpid)
 
 			if returnpid:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return phase_retval
 
 			phase_retval = exit_status_check(phase_retval)
@@ -807,7 +808,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				if phase_retval != os.EX_OK:
 					writemsg(_("!!! post postinst failed; exiting.\n"),
 						noiselevel=-1)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return phase_retval
 		elif mydo in ("prerm", "postrm", "config", "info"):
 			retval =  spawn(
@@ -816,11 +817,11 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				fd_pipes=fd_pipes, returnpid=returnpid)
 
 			if returnpid:
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return retval
 
 			retval = exit_status_check(retval)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return retval
 
 		mycpv = "/".join((mysettings["CATEGORY"], mysettings["PF"]))
@@ -850,7 +851,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				writemsg(_("!!! Invalid SRC_URI for '%s'.\n") % mycpv,
 					noiselevel=-1)
 				del e
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return 1
 			mysettings.configdict["pkg"]["A"] = " ".join(alist)
 			mysettings.configdict["pkg"]["AA"] = " ".join(aalist)
@@ -862,7 +863,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 					fetchme = alist
 				if not fetch(fetchme, mysettings, listonly=listonly,
 					fetchonly=fetchonly):
-					portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+					HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 					return 1
 
 		else:
@@ -877,17 +878,17 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			checkme = alist
 
 		if mydo == "fetch" and listonly:
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 0
 
 		try:
 			if mydo == "manifest":
 				retval = digestgen(mysettings=mysettings, myportdb=mydbapi)
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return not retval
 			elif mydo == "digest":
 				retval = digestgen(mysettings=mysettings, myportdb=mydbapi)
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return not retval
 			elif mydo != 'fetch' and not emerge_skip_digest and \
 				"digest" in mysettings.features:
@@ -898,17 +899,17 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		except PermissionDenied as e:
 			writemsg(_("!!! Permission Denied: %s\n") % (e,), noiselevel=-1)
 			if mydo in ("digest", "manifest"):
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return 1
 
 		# See above comment about fetching only when needed
 		if not emerge_skip_distfiles and \
 			not digestcheck(checkme, mysettings, "strict" in features):
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 1
 
 		if mydo == "fetch":
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 0
 
 		# remove PORTAGE_ACTUAL_DISTDIR once cvs/svn is supported via SRC_URI
@@ -1012,7 +1013,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				os.path.join(mysettings["PORTAGE_BUILDDIR"], ".installed")):
 				writemsg(_("!!! mydo=qmerge, but the install phase has not been run\n"),
 					noiselevel=-1)
-				portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+				HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 				return 1
 			# qmerge is a special phase that implies noclean.
 			if "noclean" not in mysettings.features:
@@ -1041,10 +1042,10 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 					vartree=vartree, prev_mtimes=prev_mtimes)
 		else:
 			writemsg_stdout(_("!!! Unknown mydo: %s\n") % mydo, noiselevel=-1)
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 1
 
-		portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+		HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 		return retval
 
 	finally:
@@ -1116,10 +1117,10 @@ def _validate_deps(mysettings, myroot, mydo, mydbapi):
 			portage.util.writemsg_level(x,
 				level=logging.ERROR, noiselevel=-1)
 		if mydo not in invalid_dep_exempt_phases:
-			portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return 1
 
-	portage.hooks.HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
+	HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 	return os.EX_OK
 
 # XXX This would be to replace getstatusoutput completely.
