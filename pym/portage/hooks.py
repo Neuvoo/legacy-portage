@@ -18,10 +18,10 @@ from process import spawn
 
 class HookDirectory(object):
 
-	def __init__ (self, phase, settings, myopts=None, myaction=None, myfiles=None):
+	def __init__ (self, phase, settings, myopts=None, myaction=None, mytargets=None):
 		self.myopts = myopts
 		self.myaction = myaction
-		self.myfiles = myfiles
+		self.mytargets = mytargets
 		check_config_instance(settings)
 		self.settings = settings
 		self.path = os.path.join(settings["PORTAGE_CONFIGROOT"], HOOKS_PATH, phase + '.d')
@@ -42,17 +42,17 @@ class HookDirectory(object):
 				for dir in dirs:
 					self.output.ewarn('Directory within hook directory not allowed: ' + path+'/'+dir)
 				for filename in files:
-					HookFile(os.path.join(path, filename), self.settings, self.myopts, self.myaction, self.myfiles).execute()
+					HookFile(os.path.join(path, filename), self.settings, self.myopts, self.myaction, self.mytargets).execute()
 		
 		else:
 			raise InvalidLocation('This hook path ought to be a directory: ' + path)
 
 class HookFile (object):
 	
-	def __init__ (self, path, settings, myopts=None, myaction=None, myfiles=None):
+	def __init__ (self, path, settings, myopts=None, myaction=None, mytargets=None):
 		self.myopts = myopts
 		self.myaction = myaction
-		self.myfiles = myfiles
+		self.mytargets = mytargets
 		check_config_instance(settings)
 		self.path = path
 		self.settings = settings
@@ -70,9 +70,9 @@ class HookFile (object):
 					command.extend(['--opt', myopt])
 			if self.myaction:
 				command.extend(['--action', self.myaction])
-			if self.myfiles:
-				for myfile in self.myfiles:
-					command.extend(['--file', myfile])
+			if self.mytargets:
+				for mytarget in self.mytargets:
+					command.extend(['--target', mytarget])
 			
 			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && source ' + ' '.join(command)]
 			code = spawn(mycommand=command, env=self.settings.environ())

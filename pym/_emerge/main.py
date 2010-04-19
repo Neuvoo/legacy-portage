@@ -1185,7 +1185,7 @@ def emerge_main():
 
 	# Portage configured; let's let a hook set everything up before we do anything more
 	if "hooks" in settings['FEATURES']:
-		portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, myfiles=myfiles).execute()
+		portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute()
 
 	rval = profile_check(trees, myaction)
 	if rval != os.EX_OK:
