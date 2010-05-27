@@ -1,6 +1,6 @@
-# Copyright 1999-2009 Gentoo Foundation
+#!/bin/bash
+# Copyright 1999-2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 # We need this next line for "die" and "assert". It expands
 # It _must_ preceed all the calls to die and assert.
@@ -43,7 +43,7 @@ dump_trace() {
 	eerror "Call stack:"
 	while (( n > ${strip} )) ; do
 		funcname=${FUNCNAME[${n} - 1]}
-		sourcefile=$(basename ${BASH_SOURCE[${n}]})
+		sourcefile=$(basename "${BASH_SOURCE[${n}]}")
 		lineno=${BASH_LINENO[${n} - 1]}
 		# Display function arguments
 		args=
@@ -123,7 +123,7 @@ die() {
 		    # erase the line and set the hold buffer to it (thus
 		    # erasing the hold buffer in the process)
 		    /[^\]$/{s:^.*$::;h}' \
-		${BASH_SOURCE[1]} \
+		"${BASH_SOURCE[1]}" \
 		| sed -e '1d' -e 's:^:RETAIN-LEADING-SPACE:' \
 		| while read -r n ; do eerror "  ${n#RETAIN-LEADING-SPACE}" ; done
 	eerror
@@ -528,7 +528,7 @@ save_ebuild_env() {
 			hasg hasgq hasv hasq qa_source qa_call \
 			addread addwrite adddeny addpredict _sb_append_var \
 			lchown lchgrp esyslog use usev useq has_version portageq \
-			best_version use_with use_enable register_die_hook check_KV \
+			best_version use_with use_enable register_die_hook \
 			keepdir unpack strip_duplicate_slashes econf einstall \
 			dyn_setup dyn_unpack dyn_clean into insinto exeinto docinto \
 			insopts diropts exeopts libopts \
@@ -536,8 +536,7 @@ save_ebuild_env() {
 			abort_test abort_install dyn_prepare dyn_configure \
 			dyn_compile dyn_test dyn_install \
 			dyn_preinst dyn_help debug-print debug-print-function \
-			debug-print-section inherit EXPORT_FUNCTIONS newdepend newrdepend \
-			newpdepend do_newdepend remove_path_entry \
+			debug-print-section inherit EXPORT_FUNCTIONS remove_path_entry \
 			save_ebuild_env filter_readonly_variables preprocess_ebuild_env \
 			source_all_bashrcs ebuild_main \
 			ebuild_phase ebuild_phase_with_hooks \
@@ -554,10 +553,11 @@ save_ebuild_env() {
 			LAST_E_CMD LAST_E_LEN LD_PRELOAD MISC_FUNCTIONS_ARGS MOPREFIX \
 			NOCOLOR NORMAL PKGDIR PKGUSE PKG_LOGDIR PKG_TMPDIR \
 			PORTAGE_ACTUAL_DISTDIR PORTAGE_ARCHLIST \
-			PORTAGE_BASHRC PORTAGE_BASHRCS_SOURCED \
+			PORTAGE_BASHRC PM_EBUILD_HOOK_DIR PORTAGE_BASHRCS_SOURCED \
 			PORTAGE_BINPKG_TAR_OPTS PORTAGE_BINPKG_TMPFILE PORTAGE_BUILDDIR \
 			PORTAGE_COLORMAP PORTAGE_CONFIGROOT PORTAGE_DEBUG \
-			PORTAGE_DEPCACHEDIR PORTAGE_GID PORTAGE_INST_GID \
+			PORTAGE_DEPCACHEDIR PORTAGE_GID \
+			PORTAGE_INST_GID \
 			PORTAGE_INST_UID PORTAGE_LOG_FILE PORTAGE_MASTER_PID \
 			PORTAGE_NONFATAL PORTAGE_QUIET \
 			PORTAGE_REPO_NAME PORTAGE_RESTRICT PORTAGE_UPDATE_ENV \
@@ -566,6 +566,7 @@ save_ebuild_env() {
 			PROFILE_PATHS PWORKDIR QA_INTERCEPTORS \
 			RC_DEFAULT_INDENT RC_DOT_PATTERN RC_ENDCOL \
 			RC_INDENTATION READONLY_EBUILD_METADATA READONLY_PORTAGE_VARS \
+			REPLACING_VERSIONS REPLACED_BY_VERSION \
 			ROOT ROOTPATH RPMDIR TEMP TMP TMPDIR USE_EXPAND \
 			WARN XARGS _RC_GET_KV_CACHE
 

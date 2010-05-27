@@ -1,12 +1,13 @@
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from __future__ import print_function
 
 import codecs
 import logging
+import shutil
 import sys
+import tempfile
 import textwrap
 import time
 import weakref
@@ -27,6 +28,7 @@ from portage.sets.base import InternalPackageSet
 from portage.util import writemsg, writemsg_level
 from portage.package.ebuild.digestcheck import digestcheck
 from portage.package.ebuild.digestgen import digestgen
+from portage.package.ebuild.prepare_build_dirs import prepare_build_dirs
 
 from _emerge.BinpkgPrefetcher import BinpkgPrefetcher
 from _emerge.Blocker import Blocker
@@ -257,7 +259,7 @@ class Scheduler(PollScheduler):
 					"thus parallel-fetching is being disabled"+"\n",
 					noiselevel=-1)
 				portage.writemsg(red("!!!")+"\n", noiselevel=-1)
-			elif len(mergelist) > 1:
+			elif merge_count > 1:
 				self._parallel_fetch = True
 
 		if self._parallel_fetch:
@@ -853,8 +855,85 @@ class Scheduler(PollScheduler):
 		os.environ["PORTAGE_NICENESS"] = "0"
 		os.execv(mynewargv[0], mynewargv)
 
-	def merge(self):
+	def _run_pkg_pretend(self):
+		shown_verifying_msg = False
 
+		failures = 0
+
+		for x in self._mergelist:
+			if not isinstance(x, Package):
+				continue
+
+			if x.operation == "uninstall":
+				continue
+
+			if x.metadata["EAPI"] in ("0", "1", "2", "3"):
+				continue
+
+			if "pretend" not in x.metadata.defined_phases:
+				continue
+
+			if not shown_verifying_msg and self._background:
+				shown_verifying_msg = True
+				self._status_msg("Running pre-merge checks")
+
+			if not self._background:
+				out_str =">>> Running pre-merge checks for " + colorize("INFORM", x.cpv) + "\n"
+				portage.util.writemsg_stdout(out_str, noiselevel=-1)
+
+			root_config = x.root_config
+			settings = self.pkgsettings[root_config.root]
+			tmpdir = tempfile.mkdtemp()
+			tmpdir_orig = settings["PORTAGE_TMPDIR"]
+			settings["PORTAGE_TMPDIR"] = tmpdir
+
+			if x.built:
+				tree = "bintree"
+				bintree = root_config.trees["bintree"].dbapi.bintree
+				if bintree.isremote(x.cpv):
+					fetcher = BinpkgPrefetcher(background=self._background,
+						logfile=self.settings.get("PORTAGE_LOG_FILE"), pkg=x, scheduler=self._sched_iface)
+					fetcher.start()
+					fetcher.wait()
+
+				tbz2_file = bintree.getname(x.cpv)
+				infloc = os.path.join(tmpdir, x.category, x.pf, "build-info")
+				os.makedirs(infloc)
+				portage.xpak.tbz2(tbz2_file).unpackinfo(infloc)
+				ebuild_path = os.path.join(infloc, x.pf + ".ebuild")
+
+			else:
+				tree = "porttree"
+				portdb = root_config.trees["porttree"].dbapi
+				ebuild_path = portdb.findname(x.cpv)
+				if ebuild_path is None:
+					raise AssertionError("ebuild not found for '%s'" % x.cpv)
+
+			portage.package.ebuild.doebuild.doebuild_environment(ebuild_path,
+				"pretend", root_config.root, settings,
+				debug=(settings.get("PORTAGE_DEBUG", "") == 1),
+				mydbapi=self.trees[settings["ROOT"]][tree].dbapi, use_cache=1)
+			prepare_build_dirs(root_config.root, settings, cleanup=0)
+			pretend_phase = EbuildPhase(background=self._background, pkg=x,
+				phase="pretend", scheduler=self._sched_iface,
+				settings=settings, tree=tree)
+
+			pretend_phase.start()
+			ret = pretend_phase.wait()
+
+			portage.elog.elog_process(x.cpv, settings)
+
+			if ret == os.EX_OK:
+				shutil.rmtree(tmpdir)
+			settings["PORTAGE_TMPDIR"] = tmpdir_orig
+
+			if ret != os.EX_OK:
+				failures += 1
+		if failures:
+			return 1
+		return os.EX_OK
+
+	def merge(self):
 		if "--resume" in self.myopts:
 			# We're resuming.
 			portage.writemsg_stdout(
@@ -910,6 +989,10 @@ class Scheduler(PollScheduler):
 		if rval != os.EX_OK and not keep_going:
 			return rval
 
+		rval = self._run_pkg_pretend()
+		if rval != os.EX_OK:
+			return rval
+			
 		while True:
 			rval = self._merge()
 			if rval == os.EX_OK or fetchonly or not keep_going:
@@ -1012,7 +1095,7 @@ class Scheduler(PollScheduler):
 				msg()
 
 		if len(self._failed_pkgs_all) > 1 or \
-			(self._failed_pkgs_all and "--keep-going" in self.myopts):
+			(self._failed_pkgs_all and keep_going):
 			if len(self._failed_pkgs_all) > 1:
 				msg = "The following %d packages have " % \
 					len(self._failed_pkgs_all) + \

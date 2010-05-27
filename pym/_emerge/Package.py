@@ -1,6 +1,5 @@
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 import re
 import sys
@@ -30,7 +29,8 @@ class Package(Task):
 		"BUILD_TIME", "CHOST", "COUNTER", "DEPEND", "EAPI",
 		"INHERITED", "IUSE", "KEYWORDS",
 		"LICENSE", "PDEPEND", "PROVIDE", "RDEPEND",
-		"repository", "PROPERTIES", "RESTRICT", "SLOT", "USE", "_mtime_"]
+		"repository", "PROPERTIES", "RESTRICT", "SLOT", "USE",
+		"_mtime_", "DEFINED_PHASES"]
 
 	def __init__(self, **kwargs):
 		Task.__init__(self, **kwargs)
@@ -137,6 +137,40 @@ class Package(Task):
 			self.invalid[msg_type] = msgs
 		msgs.append(msg)
 
+	def __str__(self):
+		if self.operation is None:
+			self.operation = "merge"
+			if self.onlydeps or self.installed:
+				self.operation = "nomerge"
+
+		if self.operation == "merge":
+			if self.type_name == "binary":
+				cpv_color = "PKG_BINARY_MERGE"
+			else:
+				cpv_color = "PKG_MERGE"
+		elif self.operation == "uninstall":
+			cpv_color = "PKG_UNINSTALL"
+		else:
+			cpv_color = "PKG_NOMERGE"
+
+		s = "(%s, %s" \
+			% (portage.output.colorize(cpv_color, self.cpv) , self.type_name)
+
+		if self.type_name == "installed":
+			if self.root != "/":
+				s += " in '%s'" % self.root
+		else:
+			if self.operation == "merge":
+				s += " scheduled for merge"
+				if self.root != "/":
+					s += " to '%s'" % self.root
+			elif self.operation == "uninstall":
+				s += " scheduled for uninstall"
+				if self.root != "/":
+					s += " from '%s'" % self.root
+		s += ")"
+		return s
+
 	class _use_class(object):
 
 		__slots__ = ("__weakref__", "enabled")
@@ -153,12 +187,11 @@ class Package(Task):
 	class _iuse(object):
 
 		__slots__ = ("__weakref__", "all", "enabled", "disabled",
-			"iuse_implicit", "tokens") + \
-			('_regex',)
+			"tokens") + ("_iuse_implicit_regex",)
 
-		def __init__(self, tokens, iuse_implicit):
+		def __init__(self, tokens, iuse_implicit_regex):
 			self.tokens = tuple(tokens)
-			self.iuse_implicit = iuse_implicit
+			self._iuse_implicit_regex = iuse_implicit_regex
 			enabled = []
 			disabled = []
 			other = []
@@ -174,23 +207,32 @@ class Package(Task):
 			self.disabled = frozenset(disabled)
 			self.all = frozenset(chain(enabled, disabled, other))
 
-		@property
-		def regex(self):
+		def is_valid_flag(self, flags):
 			"""
-			@returns: A regular expression that matches valid USE values which
-				may be specified in USE dependencies.
+			@returns: True if all flags are valid USE values which may
+				be specified in USE dependencies, False otherwise.
 			"""
-			try:
-				return self._regex
-			except AttributeError:
-				# Escape anything except ".*" which is supposed
-				# to pass through from _get_implicit_iuse()
-				regex = (re.escape(x) for x in \
-					chain(self.all, self.iuse_implicit))
-				regex = "^(%s)$" % "|".join(regex)
-				regex = re.compile(regex.replace("\\.\\*", ".*"))
-				self._regex = regex
-				return regex
+			if isinstance(flags, basestring):
+				flags = [flags]
+			missing_iuse = []
+			for flag in flags:
+				if not flag in self.all and \
+					self._iuse_implicit_regex.match(flag) is None:
+					return False
+			return True
+		
+		def get_missing_iuse(self, flags):
+			"""
+			@returns: A list of flags missing from IUSE.
+			"""
+			if isinstance(flags, basestring):
+				flags = [flags]
+			missing_iuse = []
+			for flag in flags:
+				if not flag in self.all and \
+					self._iuse_implicit_regex.match(flag) is None:
+					missing_iuse.append(flag)
+			return missing_iuse
 
 	def _get_hash_key(self):
 		hash_key = getattr(self, "_hash_key", None)
@@ -306,7 +348,7 @@ class _PackageMetadataWrapper(_PackageMetadataWrapperBase):
 
 	def _set_iuse(self, k, v):
 		self._pkg.iuse = self._pkg._iuse(
-			v.split(), self._pkg.root_config.iuse_implicit)
+			v.split(), self._pkg.root_config.settings._iuse_implicit_re)
 
 	def _set_slot(self, k, v):
 		self._pkg.slot = v
@@ -334,3 +376,7 @@ class _PackageMetadataWrapper(_PackageMetadataWrapperBase):
 	@property
 	def restrict(self):
 		return self['RESTRICT'].split()
+
+	@property
+	def defined_phases(self):
+		return self['DEFINED_PHASES'].split()

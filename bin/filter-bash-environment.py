@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # Copyright 1999-2007 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 import codecs
 import os, re, sys
@@ -117,7 +116,7 @@ def filter_bash_environment(pattern, file_in, file_out):
 		file_out.write(line)
 
 if __name__ == "__main__":
-	description = "Filter out variable assignments for varable " + \
+	description = "Filter out variable assignments for variable " + \
 		"names matching a given PATTERN " + \
 		"while leaving bash function definitions and here-documents " + \
 		"intact. The PATTERN is a space separated list of variable names" + \

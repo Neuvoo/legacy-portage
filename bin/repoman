@@ -1,7 +1,6 @@
 #!/usr/bin/python -O
 # Copyright 1999-2006 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 # Next to do: dep syntax checking in mask files
 # Then, check to make sure deps are satisfiable (to avoid "can't find match for" problems)
@@ -11,10 +10,6 @@ from __future__ import print_function
 
 import calendar
 import codecs
-try:
-	from subprocess import getstatusoutput as subprocess_getstatusoutput
-except ImportError:
-	from commands import getstatusoutput as subprocess_getstatusoutput
 import errno
 import formatter
 import logging
@@ -26,6 +21,8 @@ import sys
 import tempfile
 import time
 import platform
+import xml.etree.ElementTree
+from xml.parsers.expat import ExpatError
 
 try:
 	from urllib.request import urlopen as urllib_request_urlopen
@@ -33,7 +30,7 @@ except ImportError:
 	from urllib import urlopen as urllib_request_urlopen
 
 from itertools import chain
-from stat import S_ISDIR, ST_CTIME
+from stat import S_ISDIR
 
 if not hasattr(__builtins__, "set"):
 	from sets import Set as set
@@ -46,35 +43,26 @@ except ImportError:
 	import portage
 portage._disable_legacy_globals()
 from portage import os
+from portage import subprocess_getstatusoutput
 from portage import _encodings
 from portage import _unicode_encode
 from portage import StringIO
-
-try:
-	from repoman.checks import run_checks
-	from repoman import utilities
-except ImportError:
-	from os import path as osp
-	sys.path.insert(0, osp.join(osp.dirname(osp.dirname(osp.realpath(__file__))), 'pym'))
-	from repoman.checks import run_checks
-	from repoman import utilities
-
+from repoman.checks import run_checks
+from repoman import utilities
+from repoman.herdbase import make_herd_base
 from _emerge.Package import Package
 from _emerge.RootConfig import RootConfig
-from portage.sets import load_default_config
-
 import portage.checksum
 import portage.const
 import portage.dep
 portage.dep._dep_check_strict = True
-import portage.exception
 from portage import cvstree, normalize_path
 from portage import util
-from portage.exception import ParseError
+from portage.exception import FileNotFound, ParseError, PermissionDenied
 from portage.manifest import Manifest
 from portage.process import find_binary, spawn
-from portage.output import bold, create_color_func, darkgreen, \
-	green, nocolor, red, turquoise, yellow
+from portage.output import bold, create_color_func, \
+	green, nocolor, red
 from portage.output import ConsoleStyleFile, StyleWriter
 from portage.util import cmp_sort_key, writemsg_level
 from portage.package.ebuild.digestgen import digestgen
@@ -88,6 +76,7 @@ util.initialize_logger()
 max_desc_len = 100
 allowed_filename_chars="a-zA-Z0-9._-+:"
 disallowed_filename_chars_re = re.compile(r'[^a-zA-Z0-9._\-+:]')
+pv_toolong_re = re.compile(r'[0-9]{19,}')
 bad = create_color_func("BAD")
 
 # A sane umask is needed for files that portage creates.
@@ -161,6 +150,7 @@ def ParseArgs(args, qahelp):
 		'full' : 'Scan directory tree and print all issues (not a summary)',
 		'help' : 'Show this screen',
 		'manifest' : 'Generate a Manifest (fetches files if necessary)',
+		'manifest-check' : 'Check Manifests for missing or incorrect digests',
 		'scan' : 'Scan directory tree for QA issues' 
 	}
 
@@ -342,6 +332,7 @@ qahelp={
 	"ebuild.majorsyn":"This ebuild has a major syntax error that may cause the ebuild to fail partially or fully",
 	"ebuild.minorsyn":"This ebuild has a minor syntax error that contravenes gentoo coding style",
 	"ebuild.badheader":"This ebuild has a malformed header",
+	"manifest.bad":"Manifest has missing or incorrect digests",
 	"metadata.missing":"Missing metadata.xml files",
 	"metadata.bad":"Bad metadata.xml files",
 	"metadata.warning":"Warnings in metadata.xml files",
@@ -981,6 +972,23 @@ check_ebuild_notadded = not \
 # Build a regex from thirdpartymirrors for the SRC_URI.mirror check.
 thirdpartymirrors = portage.flatten(list(repoman_settings.thirdpartymirrors().values()))
 
+class _MetadataTreeBuilder(xml.etree.ElementTree.TreeBuilder):
+	"""
+	Implements doctype() as required to avoid deprecation warnings with
+	>=python-2.7.
+	"""
+	def doctype(self, name, pubid, system):
+		pass
+
+try:
+	herd_base = make_herd_base(os.path.join(repoman_settings["PORTDIR"], "metadata/herds.xml"))
+except (EnvironmentError, ParseError, PermissionDenied) as e:
+	err(str(e))
+except FileNotFound:
+	# TODO: Download as we do for metadata.dtd, but add a way to
+	# disable for non-gentoo repoman users who may not have herds.
+	herd_base = None
+
 for x in scanlist:
 	#ebuilds and digests added to cvs respectively.
 	logging.info("checking package %s" % x)
@@ -993,6 +1001,14 @@ for x in scanlist:
 	if repolevel < 2:
 		checkdir_relative = os.path.join(catdir, checkdir_relative)
 	checkdir_relative = os.path.join(".", checkdir_relative)
+
+	if options.mode == 'manifest-check':
+		repoman_settings['O'] = checkdir
+		repoman_settings['PORTAGE_QUIET'] = '1'
+		if not portage.digestcheck([], repoman_settings, strict=1):
+			stats["manifest.bad"] += 1
+			fails["manifest.bad"].append(os.path.join(x, 'Manifest'))
+		continue
 
 	if options.mode == "manifest" or \
 	  options.mode in ('commit', 'fix') and not options.pretend:
@@ -1296,16 +1312,35 @@ for x in scanlist:
 	else:
 		metadata_bad = False
 
-		# load USE flags from metadata.xml
+		# read metadata.xml into memory
 		try:
-			f = open(os.path.join(checkdir, "metadata.xml"))
-			utilities.parse_metadata_use(f, muselist)
-			f.close()
-		except (EnvironmentError, ParseError) as e:
+			_metadata_xml = xml.etree.ElementTree.parse(
+				os.path.join(checkdir, "metadata.xml"),
+				parser=xml.etree.ElementTree.XMLParser(
+					target=_MetadataTreeBuilder()))
+		except (ExpatError, EnvironmentError) as e:
 			metadata_bad = True
 			stats["metadata.bad"] += 1
 			fails["metadata.bad"].append("%s/metadata.xml: %s" % (x, e))
 			del e
+		else:
+			# load USE flags from metadata.xml
+			try:
+				utilities.parse_metadata_use(_metadata_xml, muselist)
+			except portage.exception.ParseError as e:
+				metadata_bad = True
+				stats["metadata.bad"] += 1
+				fails["metadata.bad"].append("%s/metadata.xml: %s" % (x, e))
+				muselist = []
+
+			# Run other metadata.xml checkers
+			try:
+				utilities.check_metadata(_metadata_xml, herd_base)
+			except (utilities.UnknownHerdsError, ) as e:
+				metadata_bad = True
+				stats["metadata.bad"] += 1
+				fails["metadata.bad"].append("%s/metadata.xml: %s" % (x, e))
+				del e
 
 		#Only carry out if in package directory or check forced
 		if xmllint_capable and not metadata_bad:
@@ -1353,7 +1388,9 @@ for x in scanlist:
 			stats["ebuild.notadded"]=stats["ebuild.notadded"]+1
 			fails["ebuild.notadded"].append(x+"/"+y+".ebuild")
 		myesplit=portage.pkgsplit(y)
-		if myesplit is None or myesplit[0] != x.split("/")[-1]:
+		if myesplit is None or myesplit[0] != x.split("/")[-1] \
+			    or pv_toolong_re.search(myesplit[1]) \
+			    or pv_toolong_re.search(myesplit[2]):
 			stats["ebuild.invalidname"]=stats["ebuild.invalidname"]+1
 			fails["ebuild.invalidname"].append(x+"/"+y+".ebuild")
 			continue
@@ -2315,22 +2352,25 @@ else:
 	# When files are removed and re-added, the cvs server will put /Attic/
 	# inside the $Header path. This code detects the problem and corrects it
 	# so that the Manifest will generate correctly. See bug #169500.
-	from portage.util import write_atomic
-	cvs_header = re.compile(r'^#\s*\$Header.*\$$')
+	# Use binary mode in order to avoid potential character encoding issues.
+	cvs_header_re = re.compile(br'^#\s*\$Header.*\$$')
+	attic_str = b'/Attic/'
+	attic_replace = b'/'
 	for x in myheaders:
-		f = codecs.open(_unicode_encode(x,
+		f = open(_unicode_encode(x,
 			encoding=_encodings['fs'], errors='strict'),
-			mode='r', encoding=_encodings['repo.content'], errors='strict')
+			mode='rb')
 		mylines = f.readlines()
 		f.close()
 		modified = False
 		for i, line in enumerate(mylines):
-			if cvs_header.match(line) and "/Attic/" in line:
-				mylines[i] = line.replace("/Attic/", "/")
+			if cvs_header_re.match(line) is not None and \
+				attic_str in line:
+				mylines[i] = line.replace(attic_str, attic_replace)
 				modified = True
 		if modified:
-			write_atomic(x, "".join(mylines),
-				encoding=_encodings['repo.content'], errors='strict')
+			portage.util.write_atomic(x, b''.join(mylines),
+				mode='wb')
 
 	manifest_commit_required = True
 	if vcs in ('cvs', 'svn') and (myupdates or myremoved):

@@ -1,7 +1,6 @@
 #!/bin/bash
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 PORTAGE_BIN_PATH="${PORTAGE_BIN_PATH:-/usr/lib/portage/bin}"
 PORTAGE_PYM_PATH="${PORTAGE_PYM_PATH:-/usr/lib/portage/pym}"
@@ -231,7 +230,7 @@ use_with() {
 		return 1
 	fi
 
-	local UW_SUFFIX=${3:+=$3}
+	local UW_SUFFIX=${3+=$3}
 	local UWORD=${2:-$1}
 
 	if useq $1; then
@@ -249,7 +248,7 @@ use_enable() {
 		return 1
 	fi
 
-	local UE_SUFFIX=${3:+=$3}
+	local UE_SUFFIX=${3+=$3}
 	local UWORD=${2:-$1}
 
 	if useq $1; then
@@ -300,20 +299,6 @@ export EXEOPTIONS="-m0755"
 export LIBOPTIONS="-m0644"
 export DIROPTIONS="-m0755"
 export MOPREFIX=${PN}
-
-check_KV() {
-	if [ -z "${KV}" ]; then
-		eerror ""
-		eerror "Could not determine your kernel version."
-		eerror "Make sure that you have a /usr/src/linux symlink,"
-		eerror "and that the indicated kernel has been configured."
-		eerror "You can also simply run the following command"
-		eerror "in the directory referenced by /usr/src/linux:"
-		eerror " make include/linux/version.h"
-		eerror ""
-		die
-	fi
-}
 
 # adds ".keep" files so that dirs aren't auto-cleaned
 keepdir() {
@@ -495,7 +480,7 @@ econf() {
 			done
 		fi
 
-		# EAPI=3 adds --disable-dependency-tracking to econf
+		# EAPI=4 adds --disable-dependency-tracking to econf
 		if ! hasq "$EAPI" 0 1 2 3 3_pre2 ; then
 			set -- --disable-dependency-tracking "$@"
 		fi
@@ -995,16 +980,19 @@ dyn_compile() {
 }
 
 dyn_test() {
+
+	if [[ -e $PORTAGE_BUILDDIR/.tested ]] ; then
+		vecho ">>> It appears that ${PN} has already been tested; skipping."
+		vecho ">>> Remove '${PORTAGE_BUILDDIR}/.tested' to force test."
+		return
+	fi
+
 	if [ "${EBUILD_FORCE_TEST}" == "1" ] ; then
-		rm -f "${PORTAGE_BUILDDIR}/.tested"
 		# If USE came from ${T}/environment then it might not have USE=test
 		# like it's supposed to here.
 		! hasq test ${USE} && export USE="${USE} test"
 	fi
-	if [[ -e $PORTAGE_BUILDDIR/.tested ]] ; then
-		vecho ">>> It appears that ${PN} has already been tested; skipping."
-		return
-	fi
+
 	trap "abort_test" SIGINT SIGQUIT
 	if [ -d "${S}" ]; then
 		cd "${S}"
@@ -1105,6 +1093,7 @@ dyn_install() {
 
 	save_ebuild_env --exclude-init-phases | filter_readonly_variables \
 		--filter-path --filter-sandbox --allow-extra-vars > environment
+	assert "save_ebuild_env failed"
 
 	bzip2 -f9 environment
 
@@ -1572,17 +1561,20 @@ source_all_bashrcs() {
 	# We assume if people are changing shopts in their bashrc they do so at their
 	# own peril.  This is the ONLY non-portage bit of code that can change shopts
 	# without a QA violation.
-	if [ -f "${PORTAGE_BASHRC}" ]; then
-		# If $- contains x, then tracing has already enabled elsewhere for some
-		# reason.  We preserve it's state so as not to interfere.
-		if [ "$PORTAGE_DEBUG" != "1" ] || [ "${-/x/}" != "$-" ]; then
-			source "${PORTAGE_BASHRC}"
-		else
-			set -x
-			source "${PORTAGE_BASHRC}"
-			set +x
+	for x in "${PORTAGE_BASHRC}" "${PM_EBUILD_HOOK_DIR}"/${CATEGORY}/{${PN},${PN}:${SLOT},${P},${PF}}; do
+		if [ -r "${x}" ]; then
+			# If $- contains x, then tracing has already enabled elsewhere for some
+			# reason.  We preserve it's state so as not to interfere.
+			if [ "$PORTAGE_DEBUG" != "1" ] || [ "${-/x/}" != "$-" ]; then
+				source "${x}"
+			else
+				set -x
+				source "${x}"
+				set +x
+			fi
 		fi
-	fi
+	done
+
 	[ ! -z "${OCC}" ] && export CC="${OCC}"
 	[ ! -z "${OCXX}" ] && export CXX="${OCXX}"
 }
@@ -1698,7 +1690,7 @@ filter_readonly_variables() {
 		"
 	fi
 
-	EPYTHON= "${PORTAGE_BIN_PATH}"/filter-bash-environment.py "${filtered_vars}"
+	EPYTHON= "${PORTAGE_BIN_PATH}"/filter-bash-environment.py "${filtered_vars}" || die "filter-bash-environment.py failed"
 }
 
 # @FUNCTION: preprocess_ebuild_env
@@ -2042,6 +2034,7 @@ ebuild_main() {
 				filter_readonly_variables --filter-path \
 				--filter-sandbox --allow-extra-vars \
 				| bzip2 -c -f9 > "$PORTAGE_UPDATE_ENV"
+			assert "save_ebuild_env failed"
 		fi
 		;;
 	unpack|prepare|configure|compile|test|clean|install)
@@ -2192,6 +2185,7 @@ elif [[ -n $EBUILD_SH_ARGS ]] ; then
 		if ! hasq "$EBUILD_SH_ARGS" clean help info nofetch ; then
 			umask 002
 			save_ebuild_env | filter_readonly_variables > "$T/environment"
+			assert "save_ebuild_env failed"
 			chown portage:portage "$T/environment" &>/dev/null
 			chmod g+w "$T/environment" &>/dev/null
 		fi

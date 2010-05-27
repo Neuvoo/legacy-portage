@@ -1,6 +1,5 @@
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from __future__ import print_function
 
@@ -109,11 +108,19 @@ def help(myopts, havecolor=1):
 		print("       " + green("--deselect") + "[=%s]" % turquoise("n"))
 
 		paragraph = \
-			"Remove atoms from the world file. This action is implied " + \
+			"Remove atoms and/or sets from the world file. This action is implied " + \
 			"by uninstall actions, including --depclean, " + \
 			"--prune and --unmerge. Use --deselect=n " + \
 			"in order to prevent uninstall actions from removing " + \
 			"atoms from the world file."
+
+		for line in wrap(paragraph, desc_width):
+			print(desc_indent + line)
+		print()
+		print("       " + green("--ignore-default-opts"))
+
+		paragraph = \
+			"Causes EMERGE_DEFAULT_OPTS (see make.conf(5)) to be ignored."
 
 		for line in wrap(paragraph, desc_width):
 			print(desc_indent + line)
@@ -379,6 +386,13 @@ def help(myopts, havecolor=1):
 		for line in wrap(desc, desc_width):
 			print(desc_indent + line)
 		print()
+		print("       " + green("--exclude") + " " + turquoise("ATOMS"))
+		desc = "A space separated list of package names or slot atoms. " + \
+			"Emerge won't  install any ebuild or binary package that " + \
+			"matches any of the given package atoms."
+		for line in wrap(desc, desc_width):
+			print(desc_indent + line)
+		print()
 		print("       "+green("--fail-clean[=n]"))
 		desc = "Clean up temporary files after a build failure. This is " + \
 			"particularly useful if you have PORTAGE_TMPDIR on " + \
@@ -529,6 +543,15 @@ def help(myopts, havecolor=1):
 			"automatically when using binary packages " + \
 			"(--usepkgonly or --getbinpkgonly) together with " + \
 			"--update and --deep."
+		for line in wrap(desc, desc_width):
+			print(desc_indent + line)
+		print()
+		print("       "+green("--rebuilt-binaries-timestamp") + "=%s" % turquoise("TIMESTAMP"))
+		desc = "This option modifies emerge's behaviour only if " + \
+			"--rebuilt-binaries is given. Only binaries that " + \
+			"have a BUILD_TIME that is larger than the given TIMESTAMP " + \
+			"and that is larger than that of the installed package will " + \
+			"be considered by the rebuilt-binaries logic."
 		for line in wrap(desc, desc_width):
 			print(desc_indent + line)
 		print()

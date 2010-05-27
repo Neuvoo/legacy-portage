@@ -1,9 +1,8 @@
 # portage.py -- core Portage functionality
-# Copyright 1998-2009 Gentoo Foundation
+# Copyright 1998-2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
-VERSION="$Rev$"[6:-2] + "-svn"
+VERSION="HEAD"
 
 # ===========================================================================
 # START OF IMPORTS -- START OF IMPORTS -- START OF IMPORTS -- START OF IMPORT
@@ -544,7 +543,7 @@ def create_trees(config_root=None, target_root=None, trees=None):
 
 	for myroot, mysettings in myroots:
 		trees[myroot] = portage.util.LazyItemsDict(trees.get(myroot, {}))
-		trees[myroot].addLazySingleton("virtuals", mysettings.getvirtuals, myroot)
+		trees[myroot].addLazySingleton("virtuals", mysettings.getvirtuals)
 		trees[myroot].addLazySingleton(
 			"vartree", vartree, myroot, categories=mysettings.categories,
 				settings=mysettings)
@@ -553,6 +552,23 @@ def create_trees(config_root=None, target_root=None, trees=None):
 		trees[myroot].addLazySingleton("bintree",
 			binarytree, myroot, mysettings["PKGDIR"], settings=mysettings)
 	return trees
+
+if VERSION == 'HEAD':
+	class _LazyVersion(proxy.objectproxy.ObjectProxy):
+		def _get_target(self):
+			global VERSION
+			if VERSION is not self:
+				return VERSION
+			if os.path.isdir(os.path.join(PORTAGE_BASE_PATH, '.git')):
+				status, output = subprocess_getstatusoutput(
+					"cd %s ; git describe --tags" % \
+					_shell_quote(PORTAGE_BASE_PATH))
+				if os.WIFEXITED(status) and os.WEXITSTATUS(status) == os.EX_OK:
+					VERSION = output
+					return VERSION
+			VERSION = 'HEAD'
+			return VERSION
+	VERSION = _LazyVersion()
 
 class _LegacyGlobalProxy(proxy.objectproxy.ObjectProxy):
 

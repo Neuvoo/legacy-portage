@@ -1,7 +1,6 @@
 # deps.py -- Portage dependency resolution functions
 # Copyright 2003-2004 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 __all__ = [
 	'Atom', 'best_match_to_list', 'cpvequal',
@@ -501,6 +500,28 @@ class _use_dep(object):
 
 		return _use_dep(tokens)
 
+	def violated_conditionals(self, other_use, parent_use=None):
+		"""
+		Create a new instance with satisfied use deps removed.
+		"""
+		tokens = []
+
+		conditional = self.conditional
+		tokens.extend(x for x in self.enabled if x not in other_use)
+		tokens.extend("-" + x for x in self.disabled if x in other_use)
+		if conditional:
+			if not parent_use:
+				raise InvalidAtom("violated_conditionals needs 'parent_use'" + \
+					" parameter for conditional flags: '%s'" % (token,))
+			tokens.extend(x + "?" for x in conditional.enabled if x in parent_use and not x in other_use)
+			tokens.extend("!" + x + "?" for x in conditional.disabled if x not in parent_use and x in other_use)
+			tokens.extend(x + "=" for x in conditional.equal if x in parent_use and x not in other_use)
+			tokens.extend(x + "=" for x in conditional.equal if x not in parent_use and x in other_use)
+			tokens.extend("!" + x + "=" for x in conditional.not_equal if x in parent_use and x in other_use)
+			tokens.extend("!" + x + "=" for x in conditional.not_equal if x not in parent_use and x not in other_use)
+
+		return _use_dep(tokens)
+
 	def _eval_qa_conditionals(self, use_mask, use_force):
 		"""
 		For repoman, evaluate all possible combinations within the constraints
@@ -550,7 +571,10 @@ class Atom(_atom_base):
 		def __init__(self, forbid_overlap=False):
 			self.overlap = self._overlap(forbid=forbid_overlap)
 
-	def __init__(self, s):
+	def __new__(cls, s, unevaluated_atom=None):
+		return _atom_base.__new__(cls, s)
+
+	def __init__(self, s, unevaluated_atom=None):
 		if isinstance(s, Atom):
 			# This is an efficiency assertion, to ensure that the Atom
 			# constructor is not called redundantly.
@@ -609,6 +633,11 @@ class Atom(_atom_base):
 		self.__dict__['use'] = use
 		self.__dict__['without_use'] = without_use
 
+		if unevaluated_atom:
+			self.__dict__['unevaluated_atom'] = unevaluated_atom
+		else:
+			self.__dict__['unevaluated_atom'] = self
+
 	def __setattr__(self, name, value):
 		raise AttributeError("Atom instances are immutable",
 			self.__class__, name, value)
@@ -658,7 +687,26 @@ class Atom(_atom_base):
 		if self.slot:
 			atom += ":%s" % self.slot
 		atom += str(self.use.evaluate_conditionals(use))
-		return Atom(atom)
+		return Atom(atom, self)
+
+	def violated_conditionals(self, other_use, parent_use=None):
+		"""
+		Create an atom instance with any USE conditional removed, that is
+		satisfied by other_use.
+		@param use: The set of enabled USE flags
+		@type use: set
+		@param use: The set of enabled USE flags to check against
+		@type use: set
+		@rtype: Atom
+		@return: an atom instance with any satisfied USE conditionals removed
+		"""
+		if not self.use:
+			return self
+		atom = remove_slot(self)
+		if self.slot:
+			atom += ":%s" % self.slot
+		atom += str(self.use.violated_conditionals(other_use, parent_use))
+		return Atom(atom, self)
 
 	def __copy__(self):
 		"""Immutable, so returns self."""
@@ -1186,10 +1234,10 @@ def match_from_list(mydep, candidate_list):
 		for x in candidate_list:
 			use = getattr(x, "use", None)
 			if use is not None:
-				regex = x.iuse.regex
+				is_valid_flag = x.iuse.is_valid_flag
 				missing_iuse = False
 				for y in mydep.use.required:
-					if regex.match(y) is None:
+					if not is_valid_flag(y):
 						missing_iuse = True
 						break
 				if missing_iuse:

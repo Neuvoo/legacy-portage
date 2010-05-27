@@ -1,6 +1,5 @@
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from __future__ import print_function
 
@@ -13,10 +12,12 @@ import logging
 import platform
 import pwd
 import re
+import shutil
 import signal
 import socket
 import stat
 import sys
+import tempfile
 import textwrap
 import time
 from itertools import chain
@@ -1163,11 +1164,12 @@ def action_deselect(settings, trees, opts, atoms):
 	expanded_atoms = set(atoms)
 	from portage.dep import Atom
 	for atom in atoms:
-		for cpv in vardb.match(atom):
-			slot, = vardb.aux_get(cpv, ['SLOT'])
-			if not slot:
-				slot = '0'
-			expanded_atoms.add(Atom('%s:%s' % (portage.cpv_getkey(cpv), slot)))
+		if not atom.startswith(SETPREFIX):
+			for cpv in vardb.match(atom):
+				slot, = vardb.aux_get(cpv, ['SLOT'])
+				if not slot:
+					slot = '0'
+				expanded_atoms.add(Atom('%s:%s' % (portage.cpv_getkey(cpv), slot)))
 
 	pretend = '--pretend' in opts
 	locked = False
@@ -1178,14 +1180,16 @@ def action_deselect(settings, trees, opts, atoms):
 		discard_atoms = set()
 		world_set.load()
 		for atom in world_set:
-			if not isinstance(atom, Atom):
-				# nested set
-				continue
 			for arg_atom in expanded_atoms:
-				if arg_atom.intersects(atom) and \
-					not (arg_atom.slot and not atom.slot):
-					discard_atoms.add(atom)
-					break
+				if arg_atom.startswith(SETPREFIX):
+					if arg_atom == atom:
+						discard_atoms.add(atom)
+						break
+				else:
+					if arg_atom.intersects(atom) and \
+						not (arg_atom.slot and not atom.slot):
+						discard_atoms.add(atom)
+						break
 		if discard_atoms:
 			for atom in sorted(discard_atoms):
 				print(">>> Removing %s from \"world\" favorites file..." % \
@@ -1325,8 +1329,33 @@ def action_info(settings, trees, myopts, myfiles):
 	mypkgs = []
 	vardb = trees[settings["ROOT"]]["vartree"].dbapi
 	portdb = trees[settings["ROOT"]]["porttree"].dbapi
+	bindb = trees[settings["ROOT"]]["bintree"].dbapi
 	for x in myfiles:
-		mypkgs.extend(vardb.match(x))
+		match_found = False
+		installed_match = vardb.match(x)
+		for installed in installed_match:
+			mypkgs.append((installed, "installed"))
+			match_found = True
+
+		if match_found:
+			continue
+
+		for db, pkg_type in ((portdb, "ebuild"), (bindb, "binary")):
+			if pkg_type == "binary" and "--usepkg" not in myopts:
+				continue
+
+			matches = db.match(x)
+			matches.reverse()
+			for match in matches:
+				if pkg_type == "binary":
+					if db.bintree.isremote(match):
+						continue
+				auxkeys = ["EAPI", "DEFINED_PHASES"]
+				metadata = dict(zip(auxkeys, db.aux_get(match, auxkeys)))
+				if metadata["EAPI"] not in ("0", "1", "2", "3") and \
+					"info" in metadata["DEFINED_PHASES"].split():
+					mypkgs.append((match, pkg_type))
+					break
 
 	# If some packages were found...
 	if mypkgs:
@@ -1346,16 +1375,31 @@ def action_info(settings, trees, myopts, myfiles):
 		print(header_width * "=")
 		from portage.output import EOutput
 		out = EOutput()
-		for cpv in mypkgs:
+		for mypkg in mypkgs:
+			cpv = mypkg[0]
+			pkg_type = mypkg[1]
 			# Get all package specific variables
-			metadata = dict(zip(auxkeys, vardb.aux_get(cpv, auxkeys)))
-			pkg = Package(built=True, cpv=cpv,
-				installed=True, metadata=zip(Package.metadata_keys,
-				(metadata.get(x, '') for x in Package.metadata_keys)),
-				root_config=root_config, type_name='installed')
+			if pkg_type == "installed":
+				metadata = dict(zip(auxkeys, vardb.aux_get(cpv, auxkeys)))
+			elif pkg_type == "ebuild":
+				metadata = dict(zip(auxkeys, portdb.aux_get(cpv, auxkeys)))
+			elif pkg_type == "binary":
+				metadata = dict(zip(auxkeys, bindb.aux_get(cpv, auxkeys)))
 
-			print("\n%s was built with the following:" % \
-				colorize("INFORM", str(pkg.cpv)))
+			pkg = Package(built=(pkg_type!="ebuild"), cpv=cpv,
+				installed=(pkg_type=="installed"), metadata=zip(Package.metadata_keys,
+				(metadata.get(x, '') for x in Package.metadata_keys)),
+				root_config=root_config, type_name=pkg_type)
+
+			if pkg_type == "installed":
+				print("\n%s was built with the following:" % \
+					colorize("INFORM", str(pkg.cpv)))
+			elif pkg_type == "ebuild":
+				print("\n%s would be build with the following:" % \
+					colorize("INFORM", str(pkg.cpv)))
+			elif pkg_type == "binary":
+				print("\n%s (non-installed binary) was built with the following:" % \
+					colorize("INFORM", str(pkg.cpv)))
 
 			pkgsettings.setcpv(pkg)
 			forced_flags = set(chain(pkgsettings.useforce,
@@ -1407,10 +1451,10 @@ def action_info(settings, trees, myopts, myfiles):
 					flags.sort(key=UseFlagDisplay.sort_separated)
 				print('%s="%s"' % (varname, ' '.join(str(f) for f in flags)), end=' ')
 			print()
-
-			for myvar in mydesiredvars:
-				if metadata[myvar].split() != settings.get(myvar, '').split():
-					print("%s=\"%s\"" % (myvar, metadata[myvar]))
+			if pkg_type == "installed":
+				for myvar in mydesiredvars:
+					if metadata[myvar].split() != settings.get(myvar, '').split():
+						print("%s=\"%s\"" % (myvar, metadata[myvar]))
 			print()
 
 			if metadata['DEFINED_PHASES']:
@@ -1418,14 +1462,41 @@ def action_info(settings, trees, myopts, myfiles):
 					continue
 
 			print(">>> Attempting to run pkg_info() for '%s'" % pkg.cpv)
-			ebuildpath = vardb.findname(pkg.cpv)
+
+			if pkg_type == "installed":
+				ebuildpath = vardb.findname(pkg.cpv)
+			elif pkg_type == "ebuild":
+				ebuildpath = portdb.findname(pkg.cpv)
+			elif pkg_type == "binary":
+				tbz2_file = bindb.bintree.getname(pkg.cpv)
+				ebuild_file_name = pkg.cpv.split("/")[1] + ".ebuild"
+				ebuild_file_contents = portage.xpak.tbz2(tbz2_file).getfile(ebuild_file_name)
+				tmpdir = tempfile.mkdtemp()
+				ebuildpath = os.path.join(tmpdir, ebuild_file_name)
+				file = open(ebuildpath, 'w')
+				file.write(ebuild_file_contents)
+				file.close()
+
 			if not ebuildpath or not os.path.exists(ebuildpath):
 				out.ewarn("No ebuild found for '%s'" % pkg.cpv)
 				continue
-			portage.doebuild(ebuildpath, "info", pkgsettings["ROOT"],
-				pkgsettings, debug=(settings.get("PORTAGE_DEBUG", "") == 1),
-				mydbapi=trees[settings["ROOT"]]["vartree"].dbapi,
-				tree="vartree")
+
+			if pkg_type == "installed":
+				portage.doebuild(ebuildpath, "info", pkgsettings["ROOT"],
+					pkgsettings, debug=(settings.get("PORTAGE_DEBUG", "") == 1),
+					mydbapi=trees[settings["ROOT"]]["vartree"].dbapi,
+					tree="vartree")
+			elif pkg_type == "ebuild":
+				portage.doebuild(ebuildpath, "info", pkgsettings["ROOT"],
+					pkgsettings, debug=(settings.get("PORTAGE_DEBUG", "") == 1),
+					mydbapi=trees[settings["ROOT"]]["porttree"].dbapi,
+					tree="porttree")
+			elif pkg_type == "binary":
+				portage.doebuild(ebuildpath, "info", pkgsettings["ROOT"],
+					pkgsettings, debug=(settings.get("PORTAGE_DEBUG", "") == 1),
+					mydbapi=trees[settings["ROOT"]]["bintree"].dbapi,
+					tree="bintree")
+				shutil.rmtree(tmpdir)
 
 def action_metadata(settings, portdb, myopts, porttrees=None):
 	if porttrees is None:
@@ -2242,6 +2313,9 @@ def action_uninstall(settings, trees, ldpath_mtimes,
 			# multiple files in a single iter_owners() call.
 			lookup_owners.append(x)
 
+		elif x.startswith(SETPREFIX) and action == "deselect":
+			valid_atoms.append(x)
+
 		else:
 			msg = []
 			msg.append("'%s' is not a valid package atom." % (x,))
@@ -2478,7 +2552,8 @@ def getportageversion(portdir, target_root, profile, chost, vardb):
 	gccver = getgccversion(chost)
 	unameout=platform.release()+" "+platform.machine()
 
-	return "Portage " + portage.VERSION +" ("+profilever+", "+gccver+", "+libcver+", "+unameout+")"
+	return "Portage %s (%s, %s, %s, %s)" % \
+		(portage.VERSION, profilever, gccver, libcver, unameout)
 
 def git_sync_timestamps(settings, portdir):
 	"""

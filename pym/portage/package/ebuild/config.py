@@ -1,6 +1,5 @@
 # Copyright 2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 __all__ = [
 	'autouse', 'best_from_dict', 'check_config_instance', 'config',
@@ -41,7 +40,7 @@ from portage.output import colorize
 from portage.process import fakeroot_capable, sandbox_capable
 from portage.util import ensure_dirs, getconfig, grabdict, \
 	grabdict_package, grabfile, grabfile_package, LazyItemsDict, \
-	normalize_path, stack_dictlist, stack_dicts, stack_lists, \
+	normalize_path, shlex_split, stack_dictlist, stack_dicts, stack_lists, \
 	writemsg, writemsg_level
 from portage.versions import catpkgsplit, catsplit, cpv_getkey
 
@@ -173,13 +172,14 @@ class config(object):
 		"PKGDIR",
 		"PKGUSE", "PKG_LOGDIR", "PKG_TMPDIR",
 		"PORTAGE_ACTUAL_DISTDIR", "PORTAGE_ARCHLIST",
-		"PORTAGE_BASHRC",
+		"PORTAGE_BASHRC", "PM_EBUILD_HOOK_DIR",
 		"PORTAGE_BINPKG_FILE", "PORTAGE_BINPKG_TAR_OPTS",
 		"PORTAGE_BINPKG_TMPFILE",
 		"PORTAGE_BIN_PATH",
 		"PORTAGE_BUILDDIR", "PORTAGE_COLORMAP",
 		"PORTAGE_CONFIGROOT", "PORTAGE_DEBUG", "PORTAGE_DEPCACHEDIR",
-		"PORTAGE_GID", "PORTAGE_INST_GID", "PORTAGE_INST_UID",
+		"PORTAGE_GID",
+		"PORTAGE_INST_GID", "PORTAGE_INST_UID",
 		"PORTAGE_IUSE",
 		"PORTAGE_LOG_FILE", "PORTAGE_MASTER_PID",
 		"PORTAGE_PYM_PATH", "PORTAGE_QUIET",
@@ -187,6 +187,7 @@ class config(object):
 		"PORTAGE_TMPDIR", "PORTAGE_UPDATE_ENV",
 		"PORTAGE_VERBOSE", "PORTAGE_WORKDIR_MODE",
 		"PORTDIR", "PORTDIR_OVERLAY", "PREROOTPATH", "PROFILE_PATHS",
+		"REPLACING_VERSIONS", "REPLACED_BY_VERSION",
 		"ROOT", "ROOTPATH", "T", "TMP", "TMPDIR",
 		"USE_EXPAND", "USE_ORDER", "WORKDIR",
 		"XARGS",
@@ -370,6 +371,7 @@ class config(object):
 			self.packages = clone.packages
 			self.useforce_list = clone.useforce_list
 			self.usemask_list = clone.usemask_list
+			self._iuse_implicit_re = clone._iuse_implicit_re
 
 			self.user_profile_dir = copy.deepcopy(clone.user_profile_dir)
 			self.local_config = copy.deepcopy(clone.local_config)
@@ -425,6 +427,7 @@ class config(object):
 			self._license_groups = copy.deepcopy(clone._license_groups)
 			self._accept_properties = copy.deepcopy(clone._accept_properties)
 			self._ppropertiesdict = copy.deepcopy(clone._ppropertiesdict)
+
 		else:
 
 			def check_var_directory(varname, var):
@@ -781,8 +784,22 @@ class config(object):
 
 			""" repoman controls PORTDIR_OVERLAY via the environment, so no
 			special cases are needed here."""
+
+			overlays = shlex_split(self.get('PORTDIR_OVERLAY', ''))
+			if overlays:
+				new_ov = []
+				for ov in overlays:
+					ov = normalize_path(ov)
+					if os.path.isdir(ov):
+						new_ov.append(ov)
+					else:
+						writemsg(_("!!! Invalid PORTDIR_OVERLAY"
+							" (not a dir): '%s'\n") % ov, noiselevel=-1)
+				self["PORTDIR_OVERLAY"] = " ".join(new_ov)
+				self.backup_changes("PORTDIR_OVERLAY")
+
 			overlay_profiles = []
-			for ov in self["PORTDIR_OVERLAY"].split():
+			for ov in shlex_split(self.get('PORTDIR_OVERLAY', '')):
 				ov = normalize_path(ov)
 				profiles_dir = os.path.join(ov, "profiles")
 				if os.path.isdir(profiles_dir):
@@ -963,19 +980,6 @@ class config(object):
 			self["PORTAGE_DEPCACHEDIR"] = self.depcachedir
 			self.backup_changes("PORTAGE_DEPCACHEDIR")
 
-			overlays = self.get("PORTDIR_OVERLAY","").split()
-			if overlays:
-				new_ov = []
-				for ov in overlays:
-					ov = normalize_path(ov)
-					if os.path.isdir(ov):
-						new_ov.append(ov)
-					else:
-						writemsg(_("!!! Invalid PORTDIR_OVERLAY"
-							" (not a dir): '%s'\n") % ov, noiselevel=-1)
-				self["PORTDIR_OVERLAY"] = " ".join(new_ov)
-				self.backup_changes("PORTDIR_OVERLAY")
-
 			if "CBUILD" not in self and "CHOST" in self:
 				self["CBUILD"] = self["CHOST"]
 				self.backup_changes("CBUILD")
@@ -1009,6 +1013,9 @@ class config(object):
 			if 'parse-eapi-glep-55' in self.features:
 				_validate_cache_for_unsupported_eapis = False
 				_glep_55_enabled = True
+
+			self._iuse_implicit_re = re.compile("^(%s)$" % \
+				"|".join(self._get_implicit_iuse()))
 
 		for k in self._case_insensitive_vars:
 			if k in self:
@@ -2575,6 +2582,14 @@ class config(object):
 
 		if phase == 'depend':
 			mydict.pop('FILESDIR', None)
+
+		if phase not in ("pretend", "setup", "preinst", "postinst") or \
+			eapi in ("0", "1", "2", "3"):
+			mydict.pop("REPLACING_VERSIONS", None)
+
+		if phase not in ("prerm", "postrm") or \
+			eapi in ("0", "1", "2", "3"):
+			mydict.pop("REPLACED_BY_VERSION", None)
 
 		return mydict
 

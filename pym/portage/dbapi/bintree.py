@@ -1,6 +1,5 @@
 # Copyright 1998-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 __all__ = ["bindbapi", "binarytree"]
 
@@ -11,7 +10,8 @@ portage.proxy.lazyimport.lazyimport(globals(),
 	'portage.output:EOutput,colorize',
 	'portage.package.ebuild.doebuild:_vdb_use_conditional_atoms',
 	'portage.update:update_dbentries',
-	'portage.util:ensure_dirs,normalize_path,writemsg,writemsg_stdout',
+	'portage.util:atomic_ofstream,ensure_dirs,normalize_path,' + \
+		'writemsg,writemsg_stdout',
 	'portage.util.listdir:listdir',
 	'portage.versions:best,catpkgsplit,catsplit',
 )
@@ -54,7 +54,7 @@ class bindbapi(fakedbapi):
 		self._aux_cache_keys = set(
 			["BUILD_TIME", "CHOST", "DEPEND", "EAPI", "IUSE", "KEYWORDS",
 			"LICENSE", "PDEPEND", "PROPERTIES", "PROVIDE",
-			"RDEPEND", "repository", "RESTRICT", "SLOT", "USE"])
+			"RDEPEND", "repository", "RESTRICT", "SLOT", "USE", "DEFINED_PHASES"])
 		self._aux_cache_slot_dict = slot_dict_class(self._aux_cache_keys)
 		self._aux_cache = {}
 
@@ -189,7 +189,7 @@ class binarytree(object):
 			self._pkgindex_aux_keys = \
 				["BUILD_TIME", "CHOST", "DEPEND", "DESCRIPTION", "EAPI",
 				"IUSE", "KEYWORDS", "LICENSE", "PDEPEND", "PROPERTIES",
-				"PROVIDE", "RDEPEND", "repository", "SLOT", "USE"]
+				"PROVIDE", "RDEPEND", "repository", "SLOT", "USE", "DEFINED_PHASES"]
 			self._pkgindex_aux_keys = list(self._pkgindex_aux_keys)
 			self._pkgindex_use_evaluated_keys = \
 				("LICENSE", "RDEPEND", "DEPEND",
@@ -213,7 +213,8 @@ class binarytree(object):
 				"RDEPEND" : "",
 				"RESTRICT": "",
 				"SLOT"    : "0",
-				"USE"     : ""
+				"USE"     : "",
+				"DEFINED_PHASES" : ""
 			}
 			self._pkgindex_inherited_keys = ["CHOST", "repository"]
 			self._pkgindex_default_header_data = {
@@ -696,12 +697,9 @@ class binarytree(object):
 				del pkgindex.packages[:]
 				pkgindex.packages.extend(iter(metadata.values()))
 				self._update_pkgindex_header(pkgindex.header)
-				from portage.util import atomic_ofstream
 				f = atomic_ofstream(self._pkgindex_file)
-				try:
-					pkgindex.write(f)
-				finally:
-					f.close()
+				pkgindex.write(f)
+				f.close()
 
 		if getbinpkgs and not self.settings["PORTAGE_BINHOST"]:
 			writemsg(_("!!! PORTAGE_BINHOST unset, but use is requested.\n"),
@@ -768,15 +766,13 @@ class binarytree(object):
 				pkgindex = None
 			if pkgindex is rmt_idx:
 				pkgindex.modified = False # don't update the header
-				from portage.util import atomic_ofstream, ensure_dirs
 				try:
 					ensure_dirs(os.path.dirname(pkgindex_file))
 					f = atomic_ofstream(pkgindex_file)
 					pkgindex.write(f)
 					f.close()
-				except PortageException:
-					if os.access(os.path.join(
-						self.settings["ROOT"], CACHE_PATH), os.W_OK):
+				except (IOError, PortageException):
+					if os.access(os.path.dirname(pkgindex_file), os.W_OK):
 						raise
 					# The current user doesn't have permission to cache the
 					# file, but that's alright.
@@ -944,6 +940,16 @@ class binarytree(object):
 			if not self._pkgindex_version_supported(pkgindex):
 				pkgindex = self._new_pkgindex()
 
+			# Discard remote metadata to ensure that _pkgindex_entry
+			# gets the local metadata. This also updates state for future
+			# isremote calls.
+			if self._remotepkgs is not None:
+				self._remotepkgs.pop(cpv, None)
+
+			# Discard cached metadata to ensure that _pkgindex_entry
+			# doesn't return stale metadata.
+			self.dbapi._aux_cache.pop(cpv, None)
+
 			try:
 				d = self._pkgindex_entry(cpv)
 			except portage.exception.InvalidDependString:
@@ -972,20 +978,12 @@ class binarytree(object):
 			pkgindex.packages.append(d)
 
 			self._update_pkgindex_header(pkgindex.header)
-			from portage.util import atomic_ofstream
 			f = atomic_ofstream(os.path.join(self.pkgdir, "Packages"))
-			try:
-				pkgindex.write(f)
-			finally:
-				f.close()
+			pkgindex.write(f)
+			f.close()
 		finally:
 			if pkgindex_lock:
 				unlockfile(pkgindex_lock)
-
-		if self._remotepkgs is not None:
-			# When a remote package is downloaded and injected,
-			# update state so self.isremote() returns False.
-			self._remotepkgs.pop(cpv, None)
 
 	def _pkgindex_entry(self, cpv):
 		"""

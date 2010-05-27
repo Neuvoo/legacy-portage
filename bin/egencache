@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # Copyright 2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from __future__ import print_function
 
@@ -55,7 +54,7 @@ def parse_args(args):
 		dest="cache_dir")
 	parser.add_option("--config-root",
 		help="location of portage config files",
-		dest="config_root")
+		dest="portage_configroot")
 	parser.add_option("--jobs",
 		action="store",
 		help="max ebuild processes to spawn")
@@ -106,6 +105,7 @@ def parse_args(args):
 	else:
 		options.load_average = None
 
+	options.config_root = options.portage_configroot
 	if options.config_root is not None and \
 		not os.path.isdir(options.config_root):
 		parser.error("Not a directory: --config-root='%s'" % \

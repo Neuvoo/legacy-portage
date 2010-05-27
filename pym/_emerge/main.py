@@ -1,6 +1,5 @@
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from __future__ import print_function
 
@@ -557,9 +556,17 @@ def parse_opts(tmpcmdline, silent=False):
 		},
 
 		"--deselect": {
-			"help"    : "remove atoms from the world file",
+			"help"    : "remove atoms/sets from the world file",
 			"type"    : "choice",
 			"choices" : ("True", "n")
+		},
+
+		"--exclude": {
+			"help"   :"A space separated list of package names or slot atoms. " + \
+				"Emerge won't  install any ebuild or binary package that " + \
+				"matches any of the given package atoms.",
+
+			"action" : "append"
 		},
 
 		"--fail-clean": {
@@ -630,6 +637,12 @@ def parse_opts(tmpcmdline, silent=False):
 			             "packages that have been rebuilt",
 			"type"     : "choice",
 			"choices"  : ("True", "n")
+		},
+		
+		"--rebuilt-binaries-timestamp": {
+			"help"   : "use only binaries that are newer than this " + \
+			           "timestamp for --rebuilt-binaries",
+			"action" : "store"
 		},
 
 		"--root": {
@@ -726,6 +739,31 @@ def parse_opts(tmpcmdline, silent=False):
 	else:
 		myoptions.complete_graph = None
 
+	if myoptions.exclude:
+		exclude = []
+		bad_atoms = []
+		for x in ' '.join(myoptions.exclude).split():
+			bad_atom = False
+			try:
+				atom = portage.dep.Atom(x)
+			except portage.exception.InvalidAtom:
+				try:
+					atom = portage.dep.Atom("null/"+x)
+				except portage.exception.InvalidAtom:
+					bad_atom = True
+			
+			if bad_atom:
+				bad_atoms.append(x)
+			else:
+				if atom.operator or atom.blocker or atom.use:
+					bad_atoms.append(x)
+				else:
+					exclude.append(atom)
+
+		if bad_atoms and not silent:
+			parser.error("Invalid Atom(s) in --exclude parameter: '%s' (only package names and slot atoms allowed)\n" % \
+				(",".join(bad_atoms),))
+
 	if myoptions.fail_clean == "True":
 		myoptions.fail_clean = True
 
@@ -769,8 +807,8 @@ def parse_opts(tmpcmdline, silent=False):
 		if backtrack < 0:
 			backtrack = None
 			if not silent:
-				writemsg("!!! Invalid --backtrack parameter: '%s'\n" % \
-					(myoptions.backtrack,), noiselevel=-1)
+				parser.error("Invalid --backtrack parameter: '%s'\n" % \
+					(myoptions.backtrack,))
 
 		myoptions.backtrack = backtrack
 
@@ -787,8 +825,8 @@ def parse_opts(tmpcmdline, silent=False):
 		if deep is not True and deep < 0:
 			deep = None
 			if not silent:
-				writemsg("!!! Invalid --deep parameter: '%s'\n" % \
-					(myoptions.deep,), noiselevel=-1)
+				parser.error("Invalid --deep parameter: '%s'\n" % \
+					(myoptions.deep,))
 
 		myoptions.deep = deep
 
@@ -806,8 +844,8 @@ def parse_opts(tmpcmdline, silent=False):
 			jobs < 1:
 			jobs = None
 			if not silent:
-				writemsg("!!! Invalid --jobs parameter: '%s'\n" % \
-					(myoptions.jobs,), noiselevel=-1)
+				parser.error("Invalid --jobs parameter: '%s'\n" % \
+					(myoptions.jobs,))
 
 		myoptions.jobs = jobs
 
@@ -820,10 +858,24 @@ def parse_opts(tmpcmdline, silent=False):
 		if load_average <= 0.0:
 			load_average = None
 			if not silent:
-				writemsg("!!! Invalid --load-average parameter: '%s'\n" % \
-					(myoptions.load_average,), noiselevel=-1)
+				parser.error("Invalid --load-average parameter: '%s'\n" % \
+					(myoptions.load_average,))
 
 		myoptions.load_average = load_average
+	
+	if myoptions.rebuilt_binaries_timestamp:
+		try:
+			rebuilt_binaries_timestamp = int(myoptions.rebuilt_binaries_timestamp)
+		except ValueError:
+			rebuilt_binaries_timestamp = -1
+
+		if rebuilt_binaries_timestamp < 0:
+			rebuilt_binaries_timestamp = 0
+			if not silent:
+				parser.error("Invalid --rebuilt-binaries-timestamp parameter: '%s'\n" % \
+					(myoptions.rebuilt_binaries_timestamp,))
+
+		myoptions.rebuilt_binaries_timestamp = rebuilt_binaries_timestamp
 
 	if myoptions.use_ebuild_visibility in ("True",):
 		myoptions.use_ebuild_visibility = True
@@ -1218,6 +1270,16 @@ def emerge_main():
 	adjust_configs(myopts, trees)
 	apply_priorities(settings)
 
+	if myaction == 'version':
+		writemsg_stdout(getportageversion(
+			settings["PORTDIR"], settings["ROOT"],
+			settings.profile_path, settings["CHOST"],
+			trees[settings["ROOT"]]["vartree"].dbapi) + '\n', noiselevel=-1)
+		return 0
+	elif myaction == 'help':
+		_emerge.help.help(myopts, portage.output.havecolor)
+		return 0
+
 	spinner = stdout_spinner()
 	if "candy" in settings.features:
 		spinner.update = spinner.update_scroll
@@ -1353,15 +1415,6 @@ def emerge_main():
 			settings.get('TERM') == 'dumb' or \
 			not sys.stdout.isatty():
 			spinner.update = spinner.update_basic
-
-	if myaction == 'version':
-		print(getportageversion(settings["PORTDIR"], settings["ROOT"],
-			settings.profile_path, settings["CHOST"],
-			trees[settings["ROOT"]]["vartree"].dbapi))
-		return 0
-	elif myaction == "help":
-		_emerge.help.help(myopts, portage.output.havecolor)
-		return 0
 
 	if "--debug" in myopts:
 		print("myaction", myaction)
@@ -1504,12 +1557,21 @@ def emerge_main():
 
 		# Ensure atoms are valid before calling unmerge().
 		vardb = trees[settings["ROOT"]]["vartree"].dbapi
+		portdb = trees[settings["ROOT"]]["porttree"].dbapi
+		bindb = trees[settings["ROOT"]]["bintree"].dbapi
 		valid_atoms = []
 		for x in myfiles:
 			if is_valid_package_atom(x):
 				try:
-					valid_atoms.append(
-						dep_expand(x, mydb=vardb, settings=settings))
+					#look at the installed files first, if there is no match
+					#look at the ebuilds, since EAPI 4 allows running pkg_info
+					#on non-installed packages
+					valid_atom = dep_expand(x, mydb=vardb, settings=settings)
+					if valid_atom.cp.split("/")[0] == "null":
+						valid_atom = dep_expand(x, mydb=portdb, settings=settings)
+					if valid_atom.cp.split("/")[0] == "null" and "--usepkg" in myopts:
+						valid_atom = dep_expand(x, mydb=bindb, settings=settings)
+					valid_atoms.append(valid_atom)
 				except portage.exception.AmbiguousPackageName as e:
 					msg = "The short ebuild name \"" + x + \
 						"\" is ambiguous.  Please specify " + \

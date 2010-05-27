@@ -1,6 +1,5 @@
 # Copyright 2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 __all__ = ['doebuild', 'doebuild_environment', 'spawn', 'spawnebuild']
 
@@ -33,8 +32,8 @@ from portage import auxdbkeys, bsd_chflags, dep_check, \
 	eapi_is_supported, merge, os, selinux, StringIO, \
 	unmerge, _encodings, _parse_eapi_ebuild_head, _os_merge, \
 	_shell_quote, _split_ebuild_name_glep55, _unicode_decode, _unicode_encode
-from portage.const import EBUILD_SH_ENV_FILE, EBUILD_SH_BINARY, \
-	INVALID_ENV_FILE, MISC_SH_BINARY
+from portage.const import EBUILD_SH_ENV_FILE, EBUILD_SH_ENV_DIR, \
+	EBUILD_SH_BINARY, INVALID_ENV_FILE, MISC_SH_BINARY
 from portage.data import portage_gid, portage_uid, secpass, \
 	uid, userpriv_groups
 from portage.dbapi.virtual import fakedbapi
@@ -213,6 +212,8 @@ def doebuild_environment(myebuild, mydo, myroot, mysettings,
 
 	mysettings["PORTAGE_BASHRC"] = os.path.join(
 		mysettings["PORTAGE_CONFIGROOT"], EBUILD_SH_ENV_FILE)
+	mysettings["PM_EBUILD_HOOK_DIR"] = os.path.join(
+		mysettings["PORTAGE_CONFIGROOT"], EBUILD_SH_ENV_DIR)
 	mysettings["EBUILD_EXIT_STATUS_FILE"] = os.path.join(
 		mysettings["PORTAGE_BUILDDIR"], ".exit_status")
 
@@ -303,7 +304,6 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 	fetchonly=0, cleanup=0, dbkey=None, use_cache=1, fetchall=0, tree=None,
 	mydbapi=None, vartree=None, prev_mtimes=None,
 	fd_pipes=None, returnpid=False):
-
 	"""
 	Wrapper function that invokes specific ebuild phases through the spawning
 	of ebuild.sh
@@ -516,6 +516,21 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 	tmpdir_orig = None
 
 	try:
+		if mydo in ("pretend", "setup"):
+			if not vartree:
+				writemsg("Warning: vartree not given to doebuild. " + \
+					"Cannot set REPLACING_VERSIONS in pkg_{pretend,setup}\n")
+			else:
+				vardb = vartree.dbapi
+				cpv = mysettings.mycpv
+				cp = portage.versions.cpv_getkey(cpv)
+				slot = mysettings.get("SLOT")
+				cpv_slot = cp + ":" + slot
+				mysettings["REPLACING_VERSIONS"] = " ".join(
+					set(portage.versions.cpv_getversion(match) \
+						for match in vardb.match(cpv_slot) + vardb.match(cpv)))
+				mysettings.backup_changes("REPLACING_VERSIONS")
+
 		if mydo in ("digest", "manifest", "help"):
 			# Temporarily exempt the depend phase from manifest checks, in case
 			# aux_get calls trigger cache generation.
@@ -810,7 +825,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 						noiselevel=-1)
 			HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 			return phase_retval
-		elif mydo in ("prerm", "postrm", "config", "info"):
+		elif mydo in ("prerm", "postrm", "config", "info", "pretend"):
 			retval =  spawn(
 				_shell_quote(ebuild_sh_binary) + " " + mydo,
 				mysettings, debug=debug, free=1, logfile=logfile,

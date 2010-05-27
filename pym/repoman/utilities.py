@@ -1,7 +1,6 @@
 # repoman: Utilities
 # Copyright 2007 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 """This module contains utility functions to help repoman find ebuilds to
 scan"""
@@ -15,22 +14,17 @@ __all__ = [
 	"get_commit_message_with_editor",
 	"get_commit_message_with_stdin",
 	"have_profile_dir",
-	"parse_metadata_use"
+	"parse_metadata_use",
+	"UnknownHerdsError",
+	"check_metadata"
 ]
 
 import codecs
 import errno
 import logging
 import sys
-try:
-	from subprocess import getstatusoutput as subprocess_getstatusoutput
-except ImportError:
-	from commands import getstatusoutput as subprocess_getstatusoutput
-
-from xml.dom import minidom
-from xml.dom import NotFoundErr
-from xml.parsers.expat import ExpatError
 from portage import os
+from portage import subprocess_getstatusoutput
 from portage import _encodings
 from portage import _unicode_decode
 from portage import _unicode_encode
@@ -112,42 +106,48 @@ def have_profile_dir(path, maxdepth=3, filename="profiles.desc"):
 		path = normalize_path(path + "/..")
 		maxdepth -= 1
 
-def parse_metadata_use(mylines, uselist=None):
+def parse_metadata_use(xml_tree, uselist=None):
 	"""
 	Records are wrapped in XML as per GLEP 56
 	returns a dict of the form a list of flags"""
 	if uselist is None:
 		uselist = []
-	try:
-		metadatadom = minidom.parse(mylines)
-	except ExpatError as e:
-		raise exception.ParseError("metadata.xml: %s" % (e,))
 
-	try:
-
-		try:
-			usetag = metadatadom.getElementsByTagName("use")
-			if not usetag:
-				return uselist
-		except NotFoundErr:
-			return uselist
-
-		try:
-			flags = usetag[0].getElementsByTagName("flag")
-		except NotFoundErr:
-			raise exception.ParseError("metadata.xml: " + \
-				"Malformed input: missing 'flag' tag(s)")
-
-		for flag in flags:
-			pkg_flag = flag.getAttribute("name")
-			if not pkg_flag:
-				raise exception.ParseError("metadata.xml: " + \
-					"Malformed input: missing 'name' attribute for 'flag' tag")
-			uselist.append(pkg_flag)
+	usetag = xml_tree.findall("use")
+	if not usetag:
 		return uselist
 
-	finally:
-		metadatadom.unlink()
+	flags = usetag[0].findall("flag")
+	if not flags:
+		raise exception.ParseError("missing 'flag' tag(s)")
+
+	for flag in flags:
+		pkg_flag = flag.get("name")
+		if pkg_flag is None:
+			raise exception.ParseError("missing 'name' attribute for 'flag' tag")
+		uselist.append(pkg_flag)
+	return uselist
+
+class UnknownHerdsError(ValueError):
+	def __init__(self, herd_names):
+		_plural = len(herd_names) != 1
+		super(UnknownHerdsError, self).__init__(
+			'Unknown %s %s' % (_plural and 'herds' or 'herd',
+			','.join('"%s"' % e for e in herd_names)))
+
+
+def check_metadata_herds(xml_tree, herd_base):
+	herd_nodes = xml_tree.findall('herd')
+	unknown_herds = [name for name in
+			(e.text.strip() for e in herd_nodes)
+			if not herd_base.known_herd(name)]
+
+	if unknown_herds:
+		raise UnknownHerdsError(unknown_herds)
+
+def check_metadata(xml_tree, herd_base):
+	if herd_base is not None:
+		check_metadata_herds(xml_tree, herd_base)
 
 def FindPackagesToScan(settings, startdir, reposplit):
 	""" Try to find packages that need to be scanned

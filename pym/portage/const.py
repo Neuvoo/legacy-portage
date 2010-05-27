@@ -1,7 +1,6 @@
 # portage: Constants
 # Copyright 1998-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 import os
 
@@ -35,6 +34,7 @@ MODULES_FILE_PATH        = USER_CONFIG_PATH + "/modules"
 CUSTOM_PROFILE_PATH      = USER_CONFIG_PATH + "/profile"
 USER_VIRTUALS_FILE       = USER_CONFIG_PATH + "/virtuals"
 EBUILD_SH_ENV_FILE       = USER_CONFIG_PATH + "/bashrc"
+EBUILD_SH_ENV_DIR        = USER_CONFIG_PATH + "/env"
 HOOKS_PATH               = USER_CONFIG_PATH + "/hooks"
 CUSTOM_MIRRORS_FILE      = USER_CONFIG_PATH + "/mirrors"
 COLOR_MAP_FILE           = USER_CONFIG_PATH + "/color.map"
@@ -79,7 +79,7 @@ INCREMENTALS             = ("USE", "USE_EXPAND", "USE_EXPAND_HIDDEN",
                            "CONFIG_PROTECT_MASK", "CONFIG_PROTECT",
                            "PRELINK_PATH", "PRELINK_PATH_MASK",
                            "PROFILE_ONLY_VARIABLES")
-EBUILD_PHASES            = ("setup", "unpack", "prepare", "configure",
+EBUILD_PHASES            = ("pretend", "setup", "unpack", "prepare", "configure",
                            "compile", "test", "install",
                            "package", "preinst", "postinst","prerm", "postrm",
                            "nofetch", "config", "info", "other")

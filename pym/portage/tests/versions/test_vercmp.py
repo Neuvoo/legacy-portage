@@ -1,7 +1,6 @@
 # test_vercmp.py -- Portage Unit Testing Functionality
 # Copyright 2006 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 from portage.tests import TestCase
 from portage.versions import vercmp
@@ -25,7 +24,7 @@ class VerCmpTestCase(TestCase):
 			("12.2.5", "12.2b"),
 		]
 		for test in tests:
-			self.failIf( vercmp( test[0], test[1] ) <= 0, msg="%s < %s? Wrong!" % (test[0],test[1]) )
+			self.assertFalse( vercmp( test[0], test[1] ) <= 0, msg="%s < %s? Wrong!" % (test[0],test[1]) )
 
 	def testVerCmpLess(self):
 		"""
@@ -48,7 +47,7 @@ class VerCmpTestCase(TestCase):
 			("12.2b", "12.2.5"),
 		]
 		for test in tests:
-			self.failIf( vercmp( test[0], test[1]) >= 0, msg="%s > %s? Wrong!" % (test[0],test[1]))
+			self.assertFalse( vercmp( test[0], test[1]) >= 0, msg="%s > %s? Wrong!" % (test[0],test[1]))
 	
 	
 	def testVerCmpEqual(self):
@@ -60,7 +59,7 @@ class VerCmpTestCase(TestCase):
 			("1.0-r0", "1.0-r0"),
 			("1.0-r1", "1.0-r1")]
 		for test in tests:
-			self.failIf( vercmp( test[0], test[1]) != 0, msg="%s != %s? Wrong!" % (test[0],test[1]))
+			self.assertFalse( vercmp( test[0], test[1]) != 0, msg="%s != %s? Wrong!" % (test[0],test[1]))
 			
 	def testVerNotEqual(self):
 		
@@ -78,4 +77,4 @@ class VerCmpTestCase(TestCase):
 			("12.2b", "12.2"),
 		]
 		for test in tests:
-			self.failIf( vercmp( test[0], test[1]) == 0, msg="%s == %s? Wrong!" % (test[0],test[1]))
+			self.assertFalse( vercmp( test[0], test[1]) == 0, msg="%s == %s? Wrong!" % (test[0],test[1]))
