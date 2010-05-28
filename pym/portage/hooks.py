@@ -34,15 +34,15 @@ class HookDirectory(object):
 		path = normalize_path(path)
 		
 		if not os.path.exists(path):
-			if self.myopts and "--verbose" in self.myopts:
-				self.output.ewarn('This hook path could not be found: ' + path)
+			if self.myopts and "--debug" in self.myopts:
+				self.output.ewarn('This hook path could not be found; ignored: ' + path)
 			return
 		
 		if os.path.isdir(path):
 			for parent, dirs, files in os.walk(path):
 				for dir in dirs:
-					if self.myopts and "--verbose" in self.myopts:
-						self.output.ewarn('Directory within hook directory not allowed: ' + path+'/'+dir)
+					if self.myopts and "--debug" in self.myopts:
+						self.output.ewarn('Directory within hook directory not allowed; ignored: ' + path+'/'+dir)
 				for filename in files:
 					HookFile(os.path.join(path, filename), self.settings, self.myopts, self.myaction, self.mytargets).execute()
 		
