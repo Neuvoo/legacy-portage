@@ -54,14 +54,12 @@ class HookFile (object):
 		self.myaction = myaction
 		self.mytargets = mytargets
 		check_config_instance(settings)
-		self.path = path
+		self.path = normalize_path(path)
 		self.settings = settings
 	
 	def execute (self):
 		if "hooks" not in settings['FEATURES']:
 			return
-
-		path = normalize_path(self.path)
 		
 		if not os.path.exists(path):
 			raise InvalidLocation('This hook path could not be found: ' + path)
