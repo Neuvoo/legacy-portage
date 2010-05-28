@@ -33,6 +33,7 @@ from portage.output import blue, bold, colorize, create_color_func, darkgreen, \
 	red, yellow
 good = create_color_func("GOOD")
 bad = create_color_func("BAD")
+from portage.hooks import HookDirectory
 from portage.sets import load_default_config, SETPREFIX
 from portage.sets.base import InternalPackageSet
 from portage.util import cmp_sort_key, writemsg, writemsg_level
@@ -1817,6 +1818,7 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 	os.umask(0o022)
 	dosyncuri = syncuri
 	updatecache_flg = False
+	HookDirectory(phase='pre-sync', settings=settings, myopts=myopts, myaction=myaction).execute()
 	if myaction == "metadata":
 		print("skipping sync")
 		updatecache_flg = True
@@ -2259,6 +2261,8 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 				[postsync, dosyncuri], env=settings.environ())
 			if retval != os.EX_OK:
 				print(red(" * ") + bold("spawn failed of " + postsync))
+
+	HookDirectory(phase='post-sync', settings=settings, myopts=myopts, myaction=myaction).execute()
 
 	if(mybestpv != mypvs) and not "--quiet" in myopts:
 		print()
