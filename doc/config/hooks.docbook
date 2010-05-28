@@ -1,0 +1,78 @@
+<chapter id='config-hooks'>
+	<title>Hooks Configuration</title>
+	<sect1 id='config-hooks-locations'>
+		<title>Hooks Locations</title>
+		<para>
+		If a hook directory exists, they will either be executed before
+		or after that particular stage. The hooks inside each directory
+		will be executed by bash. Each one will receive the environment
+		of an ebuild, so they are capable of inherit, einfo, and other
+		common commands (if you find them useful). Avoid commands that
+		may trigger changes in the filesystem!
+		</para>
+		
+		<para>
+		A hook is presently not allowed to alter portage's execution,
+		but they can supplement it with additional functionality. Since
+		hooks execute in a bash environment, they are told the parent
+		process ID, which can be used to kill the parent (nicely,
+		please) if absolutely needed. This might be useful in a pre-sync
+		script.
+		</para>
+		
+		<para>
+		When a hook is called, any of the following arguments are
+		passed:
+		<cmdsynopsis>
+			<command>/bin/bash <replaceable>...</replaceable></command><sbr/>
+
+			<arg>--opt <replaceable>portage arguments, always translated to long form, given by user at the prompt, such as "--verbose" or "--newuse"</replaceable></arg><sbr/>
+
+			<arg>--action <replaceable>a single action being performed by portage, such as "depclean", "sync", or an ebuild phase</replaceable></arg><sbr/>
+
+			<arg>--target <replaceable>the thing to perform the action with or on</replaceable></arg>
+		</cmdsynopsis>
+		</para>
+		
+		<para>
+		As of this writing, the following hook directories are
+		supported. It can be assumed that the above arguments apply
+		except wherever described differently.
+		</para>
+		
+		<itemizedlist>
+			<listitem><para><filename>/etc/portage/hooks/pre-ebuild.d/</filename> - executed before every ebuild execution. Never receives --opt, and --target is set to the full path of the ebuild.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/post-ebuild.d/</filename> - yet to be implemented</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/pre-run.d/</filename> - executed before portage considers most things, including proper permissions and validity of arguments.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/post-run.d/</filename> - executed after portage is done. It should run regardless of any errors or signals sent, but this cannot be guaranteed for certain scenarios (such as when the KILL signal is received). No information is available concerning the reason portage is exiting. This is a limitation of python itself.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/pre-sync.d/</filename> - executed before portage synchronizes the portage tree.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/post-sync.d/</filename> - executed after portage has successfully synchronized the portage tree. Presently you must use a combination of pre-sync and post-run to catch sync failures if desired.</para></listitem>
+		</itemizedlist>
+	</sect1>
+	<sect1 id='config-hooks-skeleton-hook'>
+		<title>Skeleton Hook</title>
+		<para>
+		Most hooks will parse the options at the beginning and look for
+		specific things. This skeleton hook provides that functionality
+		to get you started. Replace the colons with actual code where
+		desired.
+		</para>
+		<programlisting>
+		#!/bin/bash
+
+		einfo "This is an example hook."
+		while [[ "$1" != "" ]]; do
+			if [[ "$1" == "--opt" ]]; then
+				:
+			elif [[ "$1" == "--action" ]]; then
+				:
+			elif [[ "$1" == "--target" ]]; then
+				:
+			else
+				ewarn "Unknown hook option: $1 $2"
+			fi
+			shift 2
+		done
+		</programlisting>
+	</sect1>
+</chapter>

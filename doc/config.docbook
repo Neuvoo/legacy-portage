@@ -2,4 +2,5 @@
 <title>Configuration</title>
 &config_bashrc;
 &config_set;
+&config_hooks;
 </part>

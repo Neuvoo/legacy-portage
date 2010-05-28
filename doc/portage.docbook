@@ -23,6 +23,7 @@
 	<!ENTITY config SYSTEM "config.docbook">
 	<!ENTITY config_bashrc SYSTEM "config/bashrc.docbook">
 	<!ENTITY config_set SYSTEM "config/sets.docbook">
+	<!ENTITY config_hooks SYSTEM "config/hooks.docbook">
 ]>
 
 <book id="portage" lang="en">

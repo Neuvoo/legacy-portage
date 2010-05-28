@@ -62,6 +62,9 @@ repos.conf
 .BR /etc/portage/env/
 package-specific bashrc files
 .TP
+.BR /etc/portage/hooks/
+portage pre/post hooks
+.TP
 .BR /etc/portage/profile/
 site-specific overrides of \fB/etc/make.profile/\fR
 .TP
@@ -635,6 +638,14 @@ order:
 /etc/portage/env/${CATEGORY}/${P}
 .IP \n+[step].
 /etc/portage/env/${CATEGORY}/${PF}
+.RE
+.TP
+.BR /etc/portage/hooks/
+.RS
+In this directory, portage hooks are executed before each ebuild phase,
+before and after synchronization, and before and after portage runs
+themselves. Please see the DocBook documentation for detailed
+information.
 .RE
 .TP
 .BR /usr/portage/metadata/
