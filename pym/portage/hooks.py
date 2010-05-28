@@ -58,6 +58,9 @@ class HookFile (object):
 		self.settings = settings
 	
 	def execute (self):
+		if "hooks" not in settings['FEATURES']:
+			return
+
 		path = normalize_path(self.path)
 		
 		if not os.path.exists(path):
