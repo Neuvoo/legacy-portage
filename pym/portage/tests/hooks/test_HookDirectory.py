@@ -8,6 +8,14 @@ from portage.hooks import HookDirectory
 from portage.package.ebuild.config import config
 from portage.tests import TestCase
 from tempfile import mkdtemp
+from shutil import rmtree
+
+# http://stackoverflow.com/questions/845058/how-to-get-line-count-cheaply-in-python
+def file_len(fname):
+    with open(fname) as f:
+        for i, l in enumerate(f):
+            pass
+    return i + 1
 
 class HookDirectoryTestCase(TestCase):
 	
@@ -17,39 +25,25 @@ class HookDirectoryTestCase(TestCase):
 		Based on test_PackageKeywordsFile.py
 		"""
 
-		tmp_dirs = ['etc', 'portage', 'hooks', 'test.d']
-		tmp_dir_path = self.BuildTmp(tmp_dirs)
-		tmp_dirs = [tmp_dir_path, 'etc', 'portage', 'hooks', 'test.d']
+		tmp_dir_path = self.BuildTmp('/etc/portage/hooks/test.d')
 		try:
 			settings = config()
 			settings["PORTAGE_CONFIGROOT"] = tmp_dir_path
+			settings["FEATURES"] += " hooks"
 			hooks = HookDirectory('test', settings)
 			hooks.execute()
+			self.assert_(file_len(tmp_dir_path+'/output') == 1)
 		finally:
-			self.NukeTmp(tmp_dirs)
+			rmtree(tmp_dir_path)
 	
-	def BuildTmp(self, tmp_subdirs):
-		tmp_dir_path = mkdtemp()
-		hooks_dir = tmp_dir_path
-		for tmp_subdir in tmp_subdirs:
-			hooks_dir = hooks_dir + '/' + tmp_subdir
-			os.mkdir(hooks_dir)
+	def BuildTmp(self, tmp_subdir):
+		tmp_dir = mkdtemp()
+		hooks_dir = tmp_dir + '/' + tmp_subdir
+		os.makedirs(hooks_dir)
 		
 		f = open(hooks_dir+'/testhook', 'w')
 		f.write('#!/bin/bash\n')
-		f.write('exit 0\n')
+		f.write('echo hi > '+tmp_dir+'/output && exit 0\n')
 		f.close()
 		
-		return tmp_dir_path
-
-	def NukeTmp(self, tmp_dirs):
-		tmp_dir_paths = []
-		curr_path = ''
-		for tmp_dir in tmp_dirs:
-			curr_path = curr_path + '/' + tmp_dir
-			tmp_dir_paths.append(curr_path)
-		
-		tmp_dir_paths.reverse()
-		os.unlink(curr_path+'/testhook')
-		for tmp_dir_path in tmp_dir_paths:
-			os.rmdir(tmp_dir_path)
+		return tmp_dir
