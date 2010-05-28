@@ -34,13 +34,15 @@ class HookDirectory(object):
 		path = normalize_path(path)
 		
 		if not os.path.exists(path):
-			self.output.ewarn('This hook path could not be found: ' + path)
+			if self.myopts and "--verbose" in self.myopts:
+				self.output.ewarn('This hook path could not be found: ' + path)
 			return
 		
 		if os.path.isdir(path):
 			for parent, dirs, files in os.walk(path):
 				for dir in dirs:
-					self.output.ewarn('Directory within hook directory not allowed: ' + path+'/'+dir)
+					if self.myopts and "--verbose" in self.myopts:
+						self.output.ewarn('Directory within hook directory not allowed: ' + path+'/'+dir)
 				for filename in files:
 					HookFile(os.path.join(path, filename), self.settings, self.myopts, self.myaction, self.mytargets).execute()
 		
@@ -56,6 +58,7 @@ class HookFile (object):
 		check_config_instance(settings)
 		self.path = normalize_path(path)
 		self.settings = settings
+		self.output = EOutput()
 	
 	def execute (self):
 		if "hooks" not in self.settings['FEATURES']:
@@ -76,6 +79,8 @@ class HookFile (object):
 					command.extend(['--target', mytarget])
 			
 			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && source ' + ' '.join(command)]
+			if self.myopts and "--verbose" in self.myopts:
+				self.output.einfo('Executing hook "' + self.path + '"...')
 			code = spawn(mycommand=command, env=self.settings.environ())
 			if code: # if failure
 				raise PortageException('!!! Hook %s failed with exit code %s' % (self.path, code))
