@@ -58,14 +58,14 @@ class HookFile (object):
 		self.settings = settings
 	
 	def execute (self):
-		if "hooks" not in settings['FEATURES']:
+		if "hooks" not in self.settings['FEATURES']:
 			return
 		
-		if not os.path.exists(path):
-			raise InvalidLocation('This hook path could not be found: ' + path)
+		if not os.path.exists(self.path):
+			raise InvalidLocation('This hook path could not be found: ' + self.path)
 		
-		if os.path.isfile(path):
-			command=[path]
+		if os.path.isfile(self.path):
+			command=[self.path]
 			if self.myopts:
 				for myopt in self.myopts:
 					command.extend(['--opt', myopt])
@@ -78,10 +78,10 @@ class HookFile (object):
 			command=[BASH_BINARY, '-c', 'source ' + PORTAGE_BIN_PATH + '/isolated-functions.sh && source ' + ' '.join(command)]
 			code = spawn(mycommand=command, env=self.settings.environ())
 			if code: # if failure
-				raise PortageException('!!! Hook %s failed with exit code %s' % (path, code))
+				raise PortageException('!!! Hook %s failed with exit code %s' % (self.path, code))
 		
 		else:
-			raise InvalidLocation('This hook path ought to be a file: ' + path)
+			raise InvalidLocation('This hook path ought to be a file: ' + self.path)
 
 if __name__ == "__main__": # TODO: debug
 	from portage.package.ebuild.config import config
