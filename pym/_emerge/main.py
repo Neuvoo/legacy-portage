@@ -28,6 +28,7 @@ import portage.elog
 import portage.dep
 portage.dep._dep_check_strict = True
 import portage.hooks
+import portage.process
 import portage.util
 import portage.locks
 import portage.exception
@@ -1236,6 +1237,7 @@ def emerge_main():
 	portdb = trees[settings["ROOT"]]["porttree"].dbapi
 
 	# Portage configured; let's let a hook set everything up before we do anything more
+	portage.process.atexit_register(portage.hooks.HookDirectory(phase='post-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute)
 	portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute()
 
 	rval = profile_check(trees, myaction)
