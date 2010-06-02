@@ -604,10 +604,9 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 				mysettings["dbkey"] = \
 					os.path.join(mysettings.depcachedir, "aux_db_key_temp")
 
-			retval = spawn(_shell_quote(ebuild_sh_binary) + " depend",
+			return spawn(_shell_quote(ebuild_sh_binary) + " depend",
 				mysettings,
 				droppriv=droppriv)
-			return retval
 
 		# Validate dependency metadata here to ensure that ebuilds with invalid
 		# data are never installed via the ebuild command. Don't bother when
@@ -654,9 +653,8 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		del checkdir
 
 		if mydo == "unmerge":
-			retval = unmerge(mysettings["CATEGORY"],
+			return unmerge(mysettings["CATEGORY"],
 				mysettings["PF"], myroot, mysettings, vartree=vartree)
-			return retval
 
 		# Build directory creation isn't required for any of these.
 		# In the fetch phase, the directory is needed only for RESTRICT=fetch
@@ -746,9 +744,8 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		# if any of these are being called, handle them -- running them out of
 		# the sandbox -- and stop now.
 		if mydo == "help":
-			retval = spawn(_shell_quote(ebuild_sh_binary) + " " + mydo,
+			return spawn(_shell_quote(ebuild_sh_binary) + " " + mydo,
 				mysettings, debug=debug, free=1, logfile=logfile)
-			return retval
 		elif mydo == "setup":
 			retval = spawn(
 				_shell_quote(ebuild_sh_binary) + " " + mydo, mysettings,
@@ -875,11 +872,9 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 
 		try:
 			if mydo == "manifest":
-				retval = digestgen(mysettings=mysettings, myportdb=mydbapi)
-				return not retval
+				return not digestgen(mysettings=mysettings, myportdb=mydbapi)
 			elif mydo == "digest":
-				retval = digestgen(mysettings=mysettings, myportdb=mydbapi)
-				return not retval
+				return not digestgen(mysettings=mysettings, myportdb=mydbapi)
 			elif mydo != 'fetch' and not emerge_skip_digest and \
 				"digest" in mysettings.features:
 				# Don't do this when called by emerge or when called just
@@ -1056,6 +1051,8 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			# If necessary, depend phase has been triggered by aux_get calls
 			# and the exemption is no longer needed.
 			portage._doebuild_manifest_exempt_depend -= 1
+		
+		HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
 
 def _validate_deps(mysettings, myroot, mydo, mydbapi):
 
