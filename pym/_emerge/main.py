@@ -1236,8 +1236,9 @@ def emerge_main():
 	settings, trees, mtimedb = load_emerge_config()
 	portdb = trees[settings["ROOT"]]["porttree"].dbapi
 
-	# Portage configured; let's let a hook set everything up before we do anything more
+	# Have post-run hooks executed whenever portage quits
 	portage.process.atexit_register(portage.hooks.HookDirectory(phase='post-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute)
+	# Portage configured; let's let hooks run before we do anything more
 	portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute()
 
 	rval = profile_check(trees, myaction)
