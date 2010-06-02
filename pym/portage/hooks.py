@@ -2,11 +2,6 @@
 # Distributed under the terms of the GNU General Public License v2
 # $Id$
 
-# TODO: following may be harmful, but helpful for debugging
-#import os, sys
-#import os.path as osp
-#sys.path.insert(0, osp.dirname(osp.dirname(osp.abspath(__file__))))
-
 from portage.const import BASH_BINARY, HOOKS_PATH, PORTAGE_BIN_PATH
 from portage import os
 from portage import check_config_instance
@@ -87,7 +82,3 @@ class HookFile (object):
 		
 		else:
 			raise InvalidLocation('This hook path ought to be a file: ' + self.path)
-
-if __name__ == "__main__": # TODO: debug
-	from portage.package.ebuild.config import config
-	HookDirectory('run', config()).execute()
