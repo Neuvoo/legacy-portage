@@ -1234,12 +1234,15 @@ def emerge_main():
 	# Portage needs to ensure a sane umask for the files it creates.
 	os.umask(0o22)
 	settings, trees, mtimedb = load_emerge_config()
+
+	# Portage configured; let's let hooks run before we do anything more
+	portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute()
+
+	settings, trees, mtimedb = load_emerge_config() # once more, since pre-run might've done something
 	portdb = trees[settings["ROOT"]]["porttree"].dbapi
 
 	# Have post-run hooks executed whenever portage quits
 	portage.process.atexit_register(portage.hooks.HookDirectory(phase='post-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute)
-	# Portage configured; let's let hooks run before we do anything more
-	portage.hooks.HookDirectory(phase='pre-run', settings=settings, myopts=myopts, myaction=myaction, mytargets=myfiles).execute()
 
 	rval = profile_check(trees, myaction)
 	if rval != os.EX_OK:
