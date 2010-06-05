@@ -32,6 +32,7 @@ class HookDirectoryTestCase(TestCase):
 			settings["FEATURES"] += " hooks"
 			hooks = HookDirectory('test', settings)
 			hooks.execute()
+			self.assert_(settings["test"] == "this is a test")
 			self.assert_(file_len(tmp_dir_path+'/output') == 1)
 		finally:
 			rmtree(tmp_dir_path)
@@ -43,7 +44,8 @@ class HookDirectoryTestCase(TestCase):
 		
 		f = open(hooks_dir+'/testhook', 'w')
 		f.write('#!/bin/bash\n')
-		f.write('echo hi > '+tmp_dir+'/output && exit 0\n')
+		f.write('test="this is a test"\n')
+		f.write('echo hi > '+tmp_dir+'/output && hooksave test && exit 0\n')
 		f.close()
 		
 		return tmp_dir

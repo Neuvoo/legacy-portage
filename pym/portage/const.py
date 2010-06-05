@@ -61,6 +61,7 @@ PORTAGE_PYM_PATH         = PORTAGE_BASE_PATH + "/pym"
 LOCALE_DATA_PATH         = PORTAGE_BASE_PATH + "/locale"  # FIXME: not used
 EBUILD_SH_BINARY         = PORTAGE_BIN_PATH + "/ebuild.sh"
 MISC_SH_BINARY           = PORTAGE_BIN_PATH + "/misc-functions.sh"
+HOOKS_SH_BINARY          = PORTAGE_BIN_PATH + "/hooks.sh"
 SANDBOX_BINARY           = "/usr/bin/sandbox"
 FAKEROOT_BINARY          = "/usr/bin/fakeroot"
 BASH_BINARY              = "/bin/bash"
