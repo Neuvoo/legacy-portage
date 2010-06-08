@@ -45,7 +45,7 @@ class HookDirectoryTestCase(TestCase):
 		f = open(hooks_dir+'/testhook', 'w')
 		f.write('#!/bin/bash\n')
 		f.write('test="this is a test"\n')
-		f.write('echo hi > '+tmp_dir+'/output && hooksave test && exit 0\n')
+		f.write('echo hi > '+tmp_dir+'/output && hooks_savesetting test && exit 0\n')
 		f.close()
 		
 		return tmp_dir

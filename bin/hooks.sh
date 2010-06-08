@@ -10,7 +10,7 @@
 # hooks within a prepared environment, as well as acting as an API interface
 # between hooks and portage.
 
-# @FUNCTION: hooks_savetosettings
+# @FUNCTION: hooks_savesetting
 # @DESCRIPTION:
 # This function saves a variable in the environment into portage's internal
 # settings variable, which is not only used by portage but also used as the
@@ -22,7 +22,7 @@
 # 
 # NOTE: to configure only the environment of the currently running ebuild, while
 # running inside an ebuild hook, simply set the variable inside the hook.
-function hooksave () {
+function hooks_savesetting () {
 	local unsecure_varname="$1"
 	local varname="$(basename ${unsecure_varname})"
 	
@@ -33,6 +33,25 @@ function hooksave () {
 	
 	# hack: removes the beginning 'declare ... var=[quote]' and ending quote. Suggestions welcome.
 	declare -p "${varname}" | sed '1s|^[^=]*=['"'"'"]||; $s|['"'"'"]$||' > "${hooks_tmpdir}/${varname}" || return $?
+}
+
+# @FUNCTION: hooks_killportage
+# @DESCRIPTION:
+# This is a convenience function, which allows a hook to stop portage
+# immediately. This will cause portage to exit cleanly, but with an error code.
+# 
+# Takes one optional argument, which is the signal, passed to kill via the -s
+# argument.
+function hooks_killportage () {
+	local signal="$1"
+	
+	local args=( )
+	if [[ "${signal}" != "" ]]; then
+		args+=( -s "${signal}" )
+	fi
+	args+=( "${PPID}" )
+	
+	kill "${args[@]}"
 }
 
 # Local variables listed here.
