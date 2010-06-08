@@ -1,26 +1,21 @@
 <chapter id='config-hooks'>
-	<title>Hooks Configuration</title>
-	<sect1 id='config-hooks-locations'>
-		<title>Hooks Locations</title>
+	<title id="config-hooks.title">Hooks Configuration</title>
+	
+	<sect1 id='config-hooks-execution'>
+		<title id="config-hooks-execution.title">Hooks Execution</title>
+		
 		<para>
 		If a hook directory exists, the bash scripts within each one
-		wil either be executed before or after that particular stage, in
+		wil either be executed before or after that particular phase, in
 		alphabetical order. Each one will receive the environment of an
 		ebuild, so they are capable of inherit, einfo, and other common
-		commands (if you find them useful). Avoid commands that may
-		trigger changes in the filesystem!
+		commands (if you find them useful). For non-ebuild hooks, avoid
+		commands that may trigger changes in the filesystem!
 		</para>
 		
 		<para>
-		All hooks are not allowed to directly alter portage's execution,
-		but they can accomplish certain extra tasks at various points,
-		which might indrectly alter portage's execution. Since hooks
-		execute in a bash environment, they are told the parent process
-		ID, which can be used to kill portage if absolutely needed. This
-		might be useful if a hook handled the rest of a certain job,
-		such as syncing, and portage's default behavior is undesired, or
-		if a hook caught potential problems with the rest of portage's
-		execution.
+		Ebuild hooks are executed within ebuild.sh, so they receive the
+		same sandbox limitations as ebuilds.
 		</para>
 		
 		<para>
@@ -37,32 +32,50 @@
 		</para>
 		
 		<para>
-		The following hook directories are supported. The standard hook
-		script usage applies, except wherever described differently.
+		If a hook needs a temporary directory, create one inside of
+		the directory indicated by the HOOKS_TMPDIR bash variable.
+		</para>
+		
+		<para>
+		Some hook types have slightly different usage. See <quote>
+		<link linkend='config-hooks-locations' endterm="config-hooks-locations.title"/></quote> for more
+		information.
+		</para>
+		
+	</sect1>
+	
+	<sect1 id='config-hooks-locations'>
+		<title id="config-hooks-locations.title">Hooks Locations</title>		
+		<para>
+		The following hook directories are supported. Each directory
+		corresponds to a specific type, such as <quote>ebuild</quote> or
+		<quote>run</quote>. The standard hook script usage applies given
+		in <link linkend='config-hooks-execution' endterm="config-hooks-execution.title"/>,
+		except wherever	described differently below.
 		</para>
 		
 		<itemizedlist>
-			<listitem><para><filename>/etc/portage/hooks/pre-ebuild.d/</filename> - executed before every ebuild execution. Never receives --opt, and --target is set to the full path of the ebuild.</para></listitem>
-			<listitem><para><filename>/etc/portage/hooks/post-ebuild.d/</filename> - executed after every ebuild execution. Never receives --opt, and --target is set to the full path of the ebuild.</para></listitem>
-			<listitem><para><filename>/etc/portage/hooks/pre-run.d/</filename> - executed before portage considers most things, including proper permissions and validity of arguments.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/pre-ebuild.d/</filename> - executed before every ebuild phase execution, within ebuild.sh itself. Never receives --opt, and --target is set to the full path of the ebuild.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/post-ebuild.d/</filename> - executed after every ebuild phase execution. Never receives --opt, and --target is set to the full path of the ebuild.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/pre-run.d/</filename> - executed before portage considers most things, including proper permissions and validity of parsed arguments.</para></listitem>
 			<listitem><para><filename>/etc/portage/hooks/post-run.d/</filename> - executed after portage is done. It should run regardless of any errors or signals sent, but this cannot be guaranteed for certain scenarios (such as when the KILL signal is received). No information is available concerning the reason portage is exiting. This is a limitation of python itself.</para></listitem>
 			<listitem><para><filename>/etc/portage/hooks/pre-sync.d/</filename> - executed before portage synchronizes the portage tree.</para></listitem>
-			<listitem><para><filename>/etc/portage/hooks/post-sync.d/</filename> - executed after portage has successfully synchronized the portage tree. Presently you must use a combination of pre-sync and post-run to catch sync failures if desired.</para></listitem>
+			<listitem><para><filename>/etc/portage/hooks/post-sync.d/</filename> - executed after portage has <emphasis>successfully</emphasis> synchronized the portage tree. If you want to catch a sync failure, use post-run.</para></listitem>
 		</itemizedlist>
 	</sect1>
+	
 	<sect1 id='config-hooks-skeleton-hook'>
-		<title>Skeleton Hook</title>
+		<title id="config-hooks-skeleton-hook.title">Skeleton Hook</title>
 		<para>
 		Most hooks will parse the options at the beginning and look for
 		specific things. This skeleton hook provides that functionality
-		to get you started. Replace the colons with actual code where
-		desired.
+		to get you started.
 		</para>
 		<para>
 		It's highly recommended that --verbose, --debug, and --quiet be
-		utilized for suppressing or adding to "regular" output. The
-		following skeleton hook already has example code in place to
-		handle these flags.
+		utilized for suppressing or adding to <quote>regular</quote>
+		output. The following skeleton hook already has example code in
+		place to handle these flags.
 		</para>
 		<programlisting>
 		#!/bin/bash
@@ -82,16 +95,16 @@
 					debug_redirect="/dev/null"
 				fi
 			elif [[ "$1" == "--action" ]]; then
-				:
+				: # do nothing
 			elif [[ "$1" == "--target" ]]; then
-				:
+				: # do nothing
 			else
-				ewarn "Unknown hook option: $1 $2" > "${verbose_redirect}" 2>&1
+				ewarn "Unknown hook option: $1 $2" &amp;> "${verbose_redirect}"
 			fi
 			shift 2
 		done
-		einfo "This is an example hook." > "${verbose_redirect}" 2>&1
-		einfo "This is debug output." > "${debug_redirect}" 2>&1
+		einfo "This is an example hook." &amp;> "${verbose_redirect}"
+		einfo "This is debug output." &amp;> "${debug_redirect}"
 		</programlisting>
 	</sect1>
 </chapter>
