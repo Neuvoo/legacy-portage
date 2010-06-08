@@ -656,6 +656,8 @@ _eapi4_src_install() {
 
 ebuild_phase() {
 	declare -F "$1" >/dev/null && qa_call $1
+	# Process post-ebuild hooks for the actual phase (and not internal pre/post phase hooks)
+	[[ "$(expr match $1 '^pre_\|^post_')" == "0" ]] && source "${HOOKS_SH_BINARY}" --do-post-ebuild
 }
 
 ebuild_phase_with_hooks() {

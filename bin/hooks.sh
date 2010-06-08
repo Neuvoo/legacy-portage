@@ -12,21 +12,33 @@
 
 # This code is put here so it's easier to do one-liners elsewhere.
 if [[ "$1" == "--do-pre-ebuild" || "$1" == "--do-post-ebuild" ]]; then
+	if [[ "${EBUILD_PHASE}" == "" ]]; then
+		# probably die_hooks or something evil
+		return
+	fi
+	
+	if ! type hasq &> /dev/null; then
+		source "${PORTAGE_BIN_PATH}/isolated-functions.sh" &> /dev/null
+	fi
 	if hasq hooks $FEATURES ; then
 		oldwd="$(pwd)"
-		hooks_tmpdir="${T}/hooks"
 		if [[ "$1" == "--do-pre-ebuild" ]]; then
+			hooks_tmpdir="${T}/hooks-pre-${EBUILD_PHASE}"
 			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
 		else
+			hooks_tmpdir="${T}/hooks-post-${EBUILD_PHASE}"
 			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/post-ebuild.d"
 		fi
-		( [ ! -d "${hooks_dir}" ] && exit 1 ) && cd "${hooks_dir}"
+		[ -d "${hooks_dir}" ] && cd "${hooks_dir}"
 		exit_code="$?"
 		if [[ "${exit_code}" != "0" ]]; then
 			# mimicks behavior in hooks.py
-			debug-print "This hook path could not be found; ignored: ${hooks_dir}"
+			# TODO: --verbose detection?
+			:
+			#debug-print "This hook path could not be found; ignored: ${hooks_dir}"
 		else
-			mkdir "${hooks_tmpdir}" && source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
+			mkdir "${hooks_tmpdir}" || die "Could not create temporary hooks output directory: ${hooks_tmpdir}"
+			source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
 			exit_code="$?"
 			if [[ "${exit_code}" != "0" ]]; then
 				# mimicks behavior in hooks.py
