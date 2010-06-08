@@ -4,6 +4,9 @@
 	<sect1 id='config-hooks-execution'>
 		<title id="config-hooks-execution.title">Hooks Execution</title>
 		
+		<para>Hooks are only executed if <quote>hooks</quote> is set in
+		FEATURES.</para>
+		
 		<para>
 		If a hook directory exists, the bash scripts within each one
 		wil either be executed before or after that particular phase, in
