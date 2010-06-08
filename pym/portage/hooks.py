@@ -50,12 +50,13 @@ class HookDirectory(object):
 			try:
 				command=[BASH_BINARY, '-c', 'cd "'+path+'" && source "' + PORTAGE_BIN_PATH + '/isolated-functions.sh" && declare -xr hooks_tmpdir="'+tmpdir+'" && source ' + ' '.join(command)]
 				if self.myopts and "--verbose" in self.myopts:
-					self.output.einfo('Executing hook "' + self.path + '"...')
+					self.output.einfo('Executing hooks directory "' + self.path + '"...')
 				code = spawn(mycommand=command, env=self.settings.environ())
 				if code: # if failure
-					raise PortageException('!!! Hook %s failed with exit code %s' % (self.path, code))
+					raise PortageException('!!! Hook directory %s failed with exit code %s' % (self.path, code))
 					
-				self.settings = self.merge_to_env (self.settings, tmpdir)
+				if os.path.exists(tmpdir+'/settings/'):
+					self.settings = self.merge_to_env (self.settings, tmpdir+'/settings/')
 				
 			finally:
 				rmtree(tmpdir)
@@ -73,7 +74,7 @@ class HookDirectory(object):
 			for varname in files:
 				file = open(os.path.join(path, varname), 'r')
 				# read the file, remove the very last newline, and make the escaped double-quotes just plain double-quotes (since only bash needs them to be escaped, not python)
-				vardata = file.read()[:-1].replace('\"','"')
+				vardata = file.read()[:-1].replace('\"','"').strip('"')
 				existingenv[varname] = vardata
 				existingenv.backup_changes(varname)
 		
