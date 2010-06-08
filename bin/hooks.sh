@@ -2,6 +2,26 @@
 # Copyright 1999-2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
+# @MAINTAINER:
+# jacobgodserv@gmail.com
+# @BLURB: Executes hooks in the current directory.
+# @DESCRIPTION:
+# Part of the portage hooks system, this script is responsible for executing
+# hooks within a prepared environment, as well as acting as an API interface
+# between hooks and portage.
+
+# @FUNCTION: hooks_savetosettings
+# @DESCRIPTION:
+# This function saves a variable in the environment into portage's internal
+# settings variable, which is not only used by portage but also used as the
+# environment for ebuilds. The changes made here are effective until portage
+# quits, which means all ebuilds from here on will read them.
+# 
+# Takes one argument, which is the variable name to save. Arrays are allowed
+# but will be read in serialized string form.
+# 
+# NOTE: to configure only the environment of the currently running ebuild, while
+# running inside an ebuild hook, simply set the variable inside the hook.
 function hooksave () {
 	local unsecure_varname="$1"
 	local varname="$(basename ${unsecure_varname})"
@@ -15,7 +35,10 @@ function hooksave () {
 	declare -p "${varname}" | sed '1s|^[^=]*=['"'"'"]||; $s|['"'"'"]$||' > "${hooks_tmpdir}/${varname}" || return $?
 }
 
-# local variables listed here
+# Local variables listed here.
+# Using the local keyword makes no difference since this script is being sourced
+# so we'll have to unset them manually later. Be sure to keep the local_vars
+# array up-to-date.
 hook_files=( * )
 hook_args=( "$@" )
 hook_verbosity="0"
