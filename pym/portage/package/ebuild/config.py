@@ -22,9 +22,10 @@ import portage
 from portage import bsd_chflags, eapi_is_supported, \
 	load_mod, os, selinux, _encodings, _unicode_encode, _unicode_decode
 from portage.const import CACHE_PATH, CUSTOM_PROFILE_PATH, \
-	DEPCACHE_PATH, GLOBAL_CONFIG_PATH, INCREMENTALS, MAKE_CONF_FILE, \
-	MODULES_FILE_PATH, PORTAGE_BIN_PATH, PORTAGE_PYM_PATH, \
-	PRIVATE_PATH, PROFILE_PATH, USER_CONFIG_PATH, USER_VIRTUALS_FILE
+	DEPCACHE_PATH, GLOBAL_CONFIG_PATH, HOOKS_PATH, HOOKS_SH_BINARY, \
+	INCREMENTALS, MAKE_CONF_FILE, MODULES_FILE_PATH, PORTAGE_BIN_PATH, \
+	PORTAGE_PYM_PATH, PRIVATE_PATH, PROFILE_PATH, USER_CONFIG_PATH, \
+	USER_VIRTUALS_FILE
 from portage.data import portage_gid
 from portage.dbapi import dbapi
 from portage.dbapi.porttree import portdbapi
@@ -989,8 +990,8 @@ class config(object):
 
 			self["PORTAGE_BIN_PATH"] = PORTAGE_BIN_PATH
 			self.backup_changes("PORTAGE_BIN_PATH")
-			self["HOOKS_BIN_PATH"] = HOOKS_BIN_PATH
-			self.backup_changes("HOOKS_BIN_PATH")
+			self["HOOKS_SH_BINARY"] = HOOKS_SH_BINARY
+			self.backup_changes("HOOKS_SH_BINARY")
 			self["PORTAGE_PYM_PATH"] = PORTAGE_PYM_PATH
 			self.backup_changes("PORTAGE_PYM_PATH")
 

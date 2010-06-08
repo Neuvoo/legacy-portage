@@ -1761,19 +1761,22 @@ preprocess_ebuild_env() {
 # Process pre-ebuild hook
 oldwd="$(pwd)"
 hooks_tmpdir="${PORTAGE_TMPDIR}/hooks"
-cd "${HOOKS_PATH}/pre-ebuild.d"
+hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
+( [ ! -d "${hooks_dir}" ] && exit 1 ) || cd "${hooks_dir}"
 exit_code="$?"
 if [[ "${exit_code}" != "0" ]]; then
 	# mimicks behavior in hooks.py
-	debug-print "This hook path could not be found; ignored: ${HOOKS_PATH}/pre-ebuild.d"
+	debug-print "This hook path could not be found; ignored: ${hooks_dir}"
+else
+	source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
+	rm -rf "${hooks_tmpdir}"
+	exit_code="$?"
+	if [[ "${exit_code}" != "0" ]]; then
+		# mimicks behavior in hooks.py
+		die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
+	fi
 fi
-source "${HOOKS_BIN_PATH}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
-rm -rf "${hooks_tmpdir}"
-exit_code="$?"
-if [[ "${exit_code}" != "0" ]]; then
-	# mimicks behavior in hooks.py
-	die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
-fi
+cd "${oldwd}" || die "Could not return to the old ebuild directory after pre-ebuild hooks: ${oldwd}"
 
 # === === === === === === === === === === === === === === === === === ===
 # === === === === === functions end, main part begins === === === === ===
