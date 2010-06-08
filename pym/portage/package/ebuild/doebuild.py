@@ -549,8 +549,6 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		doebuild_environment(myebuild, mydo, myroot, mysettings, debug,
 			use_cache, mydbapi)
 
-		HookDirectory(phase='pre-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
-
 		if mydo in clean_phases:
 			retval = spawn(_shell_quote(ebuild_sh_binary) + " clean",
 				mysettings, debug=debug, fd_pipes=fd_pipes, free=1,
@@ -1053,8 +1051,6 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			# and the exemption is no longer needed.
 			portage._doebuild_manifest_exempt_depend -= 1
 		
-		HookDirectory(phase='post-ebuild', settings=mysettings, myopts=None, myaction=mydo, mytargets=[mysettings["EBUILD"]]).execute()
-
 def _validate_deps(mysettings, myroot, mydo, mydbapi):
 
 	invalid_dep_exempt_phases = \
