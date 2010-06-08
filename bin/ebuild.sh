@@ -1767,7 +1767,7 @@ if [[ "${exit_code}" != "0" ]]; then
 	# mimicks behavior in hooks.py
 	debug-print "This hook path could not be found; ignored: ${HOOKS_PATH}/pre-ebuild.d"
 fi
-source "${HOOKS_BIN_PATH}" --action "${EBUILD_PHASE}" --target "${$EBUILD}"
+source "${HOOKS_BIN_PATH}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
 rm -rf "${hooks_tmpdir}"
 exit_code="$?"
 if [[ "${exit_code}" != "0" ]]; then
