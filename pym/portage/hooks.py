@@ -25,6 +25,9 @@ class HookDirectory(object):
 		self.output = EOutput()
 
 	def execute (self, path=None):
+		if "hooks" not in self.settings['FEATURES']:
+			return
+		
 		if not path:
 			path = self.path
 		
@@ -32,7 +35,7 @@ class HookDirectory(object):
 		
 		if not os.path.exists(path):
 			if self.myopts and "--debug" in self.myopts:
-				# behavior mimicked ebuild.sh
+				# behavior mimicked by hook.sh
 				self.output.ewarn('This hook path could not be found; ignored: ' + path)
 			return
 		
@@ -49,12 +52,12 @@ class HookDirectory(object):
 			
 			tmpdir = mkdtemp()
 			try:
-				command=[BASH_BINARY, '-c', 'cd "'+path+'" && source "' + PORTAGE_BIN_PATH + '/isolated-functions.sh" && declare -xr hooks_tmpdir="'+tmpdir+'" && source ' + ' '.join(command)]
+				command=[BASH_BINARY, '-c', 'cd "'+path+'" && source "' + PORTAGE_BIN_PATH + '/isolated-functions.sh" && declare -x HOOKS_TMPDIR="'+tmpdir+'" && source ' + ' '.join(command)]
 				if self.myopts and "--verbose" in self.myopts:
 					self.output.einfo('Executing hooks directory "' + self.path + '"...')
 				code = spawn(mycommand=command, env=self.settings.environ())
 				if code: # if failure
-					# behavior mimicked ebuild.sh
+					# behavior mimicked by hook.sh
 					raise PortageException('!!! Hook directory %s failed with exit code %s' % (self.path, code))
 					
 				if os.path.exists(tmpdir+'/settings/'):

@@ -10,43 +10,50 @@
 # hooks within a prepared environment, as well as acting as an API interface
 # between hooks and portage.
 
+# Only run hooks if it's requested in $FEATURES
+if ! (source "${PORTAGE_BIN_PATH}/isolated-functions.sh" && hasq hooks $FEATURES) ; then
+	return
+fi
+
+# TODO: unit testing does not cover this portion of hooks.sh
 # This code is put here so it's easier to do one-liners elsewhere.
+# This section is meant to be run by ebuild.sh
 if [[ "$1" == "--do-pre-ebuild" || "$1" == "--do-post-ebuild" ]]; then
 	if [[ "${EBUILD_PHASE}" == "" ]]; then
-		# probably die_hooks or something evil
+		# an in-between-phases moment; useless to hooks
 		return
 	fi
 	
-	if ! type hasq &> /dev/null; then
-		source "${PORTAGE_BIN_PATH}/isolated-functions.sh" &> /dev/null
+
+	oldwd="$(pwd)"
+	if [[ "$1" == "--do-pre-ebuild" ]]; then
+		hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
+	else
+		hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/post-ebuild.d"
 	fi
-	if hasq hooks $FEATURES ; then
-		oldwd="$(pwd)"
-		if [[ "$1" == "--do-pre-ebuild" ]]; then
-			hooks_tmpdir="${T}/hooks-pre-${EBUILD_PHASE}"
-			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
-		else
-			hooks_tmpdir="${T}/hooks-post-${EBUILD_PHASE}"
-			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/post-ebuild.d"
+	
+	[ -d "${hooks_dir}" ] && cd "${hooks_dir}"
+	exit_code="$?"
+	if [[ "${exit_code}" != "0" ]]; then
+		# mimicks behavior in hooks.py
+		# TODO: --verbose detection?
+		:
+		#debug-print "This hook path could not be found; ignored: ${hooks_dir}"
+	else
+		# Create the temporary directory if needed
+		if [ ! -d "${HOOKS_TMPDIR}" ]; then
+			mkdir "${HOOKS_TMPDIR}" || die "Could not create temporary hooks output directory: ${HOOKS_TMPDIR}"
 		fi
-		[ -d "${hooks_dir}" ] && cd "${hooks_dir}"
+		
+		# Execute the hooks
+		source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
 		exit_code="$?"
 		if [[ "${exit_code}" != "0" ]]; then
 			# mimicks behavior in hooks.py
-			# TODO: --verbose detection?
-			:
-			#debug-print "This hook path could not be found; ignored: ${hooks_dir}"
-		else
-			mkdir "${hooks_tmpdir}" || die "Could not create temporary hooks output directory: ${hooks_tmpdir}"
-			source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
-			exit_code="$?"
-			if [[ "${exit_code}" != "0" ]]; then
-				# mimicks behavior in hooks.py
-				die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
-			fi
+			die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
 		fi
-		cd "${oldwd}" || die "Could not return to the old ebuild directory after pre-ebuild hooks: ${oldwd}"
 	fi
+	cd "${oldwd}" || die "Could not return to the old ebuild directory after pre-ebuild hooks: ${oldwd}"
 	
 	return
 fi
@@ -58,18 +65,20 @@ fi
 hook_files=( * )
 hook_args=( "$@" )
 hook_verbosity="0"
-hooks_tmpdir_settings="${hooks_tmpdir}/settings/"
-hooks_tmpdir_envonly="${hooks_tmpdir}/envonly/"
+HOOKS_TMPDIR_settings="${HOOKS_TMPDIR}/settings/"
+HOOKS_TMPDIR_envonly="${HOOKS_TMPDIR}/envonly/"
 
-# Local variables listed here.
-# Using the local keyword makes no difference since this script is being sourced
-# so we'll have to unset them manually later. Be sure to keep these arrays
-# up-to-date.
 hook_local_vars=( "hook_files" "hook_args" "hook_verbosity" ) # variables unset for hooks
-quit_local_vars=( "hooks_tmpdir_settings" "hooks_tmpdir_envonly" "${hook_local_vars[@]}" ) # variables unset at quit
+quit_local_vars=( "HOOKS_TMPDIR_settings" "HOOKS_TMPDIR_envonly" "${hook_local_vars[@]}" ) # variables unset at quit
 
-mkdir "${hooks_tmpdir_settings}" || exit $?
-mkdir "${hooks_tmpdir_envonly}" || exit $?
+# Create the directories we'll be using, if they don't already exist.
+# Settings directory can exist, since it's global anyway
+if [ ! -d "${HOOKS_TMPDIR_settings}" ]; then
+	mkdir "${HOOKS_TMPDIR_settings}" || exit $?
+fi
+# Envonly directory cannot exist, since these vars are local only
+[ -d "${HOOKS_TMPDIR_envonly}" ] && rm -rf "${HOOKS_TMPDIR_envonly}"
+mkdir "${HOOKS_TMPDIR_envonly}" || exit $?
 
 # @FUNCTION: hooks_savesetting
 # @DESCRIPTION:
@@ -77,28 +86,32 @@ mkdir "${hooks_tmpdir_envonly}" || exit $?
 # settings variable, which is not only used by portage but also used as the
 # environment for ebuilds. The changes made here are effective until portage
 # quits, which means all ebuilds from here on will read them.
+#
+# Be careful: portage resets the internal settings variable at each ebuild phase
+# and only allows whitelisted variables to persist beyond ebuild phases. Do not
+# use this to store hook-specific settings!
 # 
-# Takes one argument, which is the variable name to save. Arrays are allowed,
-# but portage will read them as strings only.
+# Takes one argument, which is the variable name to save. Arrays are allowed but
+# discouraged, since portage will read them as serialized strings only.
 function hooks_savesetting () {
-	hooks_savevarto "$1" "${hooks_tmpdir_settings}" || return $?
+	hooks_savevarto "$1" "${HOOKS_TMPDIR_settings}" || return $?
 }
 
 # @FUNCTION: hooks_saveenvonly
 # @DESCRIPTION:
 # Like hooks_savesetting, except that the variable will only be saved so that
-# future hooks and, if it is an ebuild hook, the current ebuild will see it. In
-# other words, the big difference is this change isn't saved in portage's
+# future hooks and, if it is an ebuild hook, the current ebuild phase will see
+# it. In other words, the big difference is this change isn't saved in portage's
 # internal settings variable while portage is running.
 # 
 # Takes one argument, which is the variable name to save. Arrays are allowed.
 function hooks_saveenvonly () {
-	hooks_savevarto "$1" "${hooks_tmpdir_envonly}" || return $?
+	hooks_savevarto "$1" "${HOOKS_TMPDIR_envonly}" || return $?
 }
 
 # @FUNCTION: hooks_savevarto
 # @DESCRIPTION:
-# Do not call directly.
+# Hook developers are highly discouraged from calling directly.
 #
 # Used by hook APIs to serialize a variable to a file inside the specified
 # directory.
@@ -130,10 +143,15 @@ function hooks_savevarto () {
 # @FUNCTION: hooks_killportage
 # @DESCRIPTION:
 # This is a convenience function, which allows a hook to stop portage
-# immediately. This will cause portage to exit cleanly, but with an error code.
+# immediately. This will cause portage to exit without whining too much.
+# Portage will still exit with an error code, breaking wrapper scripts like
+# eix-sync.
 # 
-# Takes one optional argument, which is the signal, passed to kill via the -s
-# argument.
+# Takes one optional argument, which is the kill signal, passed to kill via the
+# -s argument. Otherwise, uses kill's default signal.
+
+# TODO: unable to test with unit tests, since it forces even the testing module
+# to quit
 function hooks_killportage () {
 	local signal="$1"
 	
@@ -172,13 +190,19 @@ for (( i = 0 ; i < ${#hook_files[@]} ; i++ )); do
 	# We need to re-export variables that hooks saved. The goal is to let the
 	# specifically-saved variables escape the hook "( ... )" subshell and carry
 	# over into the next hook or an ebuild env.
-	var_files=( "${hooks_tmpdir_envonly}"/* "${hooks_tmpdir_settings}"/* )
+	var_files=( "${HOOKS_TMPDIR_envonly}"/* "${HOOKS_TMPDIR_settings}"/* )
 	for (( varI = 0 ; varI < ${#var_files[@]} ; varI++ )); do
+		varname="$(basename ${var_files[$varI]})"
 		# if there are no files, the variable points to a non-existant file, which we want to catch here
 		if [ ! -f "${var_files[$varI]}" ]; then
 			continue;
 		fi
-		eval declare -x "$(basename ${var_files[$varI]})"="$(cat ${var_files[$varI]})" || exit $?
+		# if the variable is not read-only
+		if $(unset "${varname}" 2> /dev/null) ; then
+			eval declare -x "$(basename ${var_files[$varI]})"="$(cat ${var_files[$varI]})" || exit $?
+		else
+			ewarn "A hook tried to modify a read-only variable: ${varname}"
+		fi
 	done
 done
 
