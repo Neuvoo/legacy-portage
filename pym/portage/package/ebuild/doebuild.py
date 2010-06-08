@@ -21,6 +21,7 @@ import time
 
 import portage
 portage.proxy.lazyimport.lazyimport(globals(),
+	'portage.package.ebuild.const:HOOKS_SH_BINARY',
 	'portage.package.ebuild.config:check_config_instance',
 	'portage.package.ebuild.digestcheck:digestcheck',
 	'portage.package.ebuild.digestgen:digestgen',
