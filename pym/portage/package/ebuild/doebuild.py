@@ -1057,7 +1057,6 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 		if (os.path.exists(mysettings["HOOKS_TMPDIR"]+"/settings/")):
 			hookDirectory = HookDirectory('post-ebuild', mysettings)
 			mysettings = hookDirectory.merge_to_env(mysettings, mysettings["HOOKS_TMPDIR"]+"/settings/")
-			print 'PYTHON: '+mysettings["PORTAGE_TMPDIR"]
 			shutil.rmtree(mysettings["HOOKS_TMPDIR"])
 		
 def _validate_deps(mysettings, myroot, mydo, mydbapi):
