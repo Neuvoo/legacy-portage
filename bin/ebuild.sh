@@ -1760,7 +1760,7 @@ preprocess_ebuild_env() {
 
 # Process pre-ebuild hook
 oldwd="$(pwd)"
-hooks_tmpdir="${PORTAGE_TMPDIR}/hooks"
+hooks_tmpdir="${T}/hooks"
 hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
 ( [ ! -d "${hooks_dir}" ] && exit 1 ) || cd "${hooks_dir}"
 exit_code="$?"
@@ -1768,8 +1768,7 @@ if [[ "${exit_code}" != "0" ]]; then
 	# mimicks behavior in hooks.py
 	debug-print "This hook path could not be found; ignored: ${hooks_dir}"
 else
-	source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
-	rm -rf "${hooks_tmpdir}"
+	mkdir "${hooks_tmpdir}" && source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
 	exit_code="$?"
 	if [[ "${exit_code}" != "0" ]]; then
 		# mimicks behavior in hooks.py
