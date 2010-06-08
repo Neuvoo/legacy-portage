@@ -1759,23 +1759,7 @@ preprocess_ebuild_env() {
 }
 
 # Process pre-ebuild hook
-oldwd="$(pwd)"
-hooks_tmpdir="${T}/hooks"
-hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
-( [ ! -d "${hooks_dir}" ] && exit 1 ) || cd "${hooks_dir}"
-exit_code="$?"
-if [[ "${exit_code}" != "0" ]]; then
-	# mimicks behavior in hooks.py
-	debug-print "This hook path could not be found; ignored: ${hooks_dir}"
-else
-	mkdir "${hooks_tmpdir}" && source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
-	exit_code="$?"
-	if [[ "${exit_code}" != "0" ]]; then
-		# mimicks behavior in hooks.py
-		die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
-	fi
-fi
-cd "${oldwd}" || die "Could not return to the old ebuild directory after pre-ebuild hooks: ${oldwd}"
+source "${HOOKS_SH_BINARY}" --do-pre-ebuild
 
 # === === === === === === === === === === === === === === === === === ===
 # === === === === === functions end, main part begins === === === === ===

@@ -951,8 +951,8 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 
 		fakeroot = "fakeroot" in mysettings.features
 
-		ebuild_sh = _shell_quote(ebuild_sh_binary) + " %s"
-		misc_sh = _shell_quote(misc_sh_binary) + " dyn_%s"
+		ebuild_sh = _shell_quote(ebuild_sh_binary) + " %s && source \""+HOOKS_SH_BINARY+"\" --do-post-ebuild"
+		misc_sh = _shell_quote(misc_sh_binary) + " dyn_%s && source \""+HOOKS_SH_BINARY+"\" --do-post-ebuild"
 
 		# args are for the to spawn function
 		actionmap = {

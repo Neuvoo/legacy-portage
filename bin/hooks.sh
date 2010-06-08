@@ -10,6 +10,34 @@
 # hooks within a prepared environment, as well as acting as an API interface
 # between hooks and portage.
 
+# This code is put here so it's easier to do one-liners elsewhere.
+if [[ "$1" == "--do-pre-ebuild" || "$1" == "--do-post-ebuild" ]]; then
+	if hasq hooks $FEATURES ; then
+		oldwd="$(pwd)"
+		hooks_tmpdir="${T}/hooks"
+		if [[ "$1" == "--do-pre-ebuild" ]]; then
+			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/pre-ebuild.d"
+		else
+			hooks_dir="${PORTAGE_CONFIGROOT}/${HOOKS_PATH}/post-ebuild.d"
+		fi
+		( [ ! -d "${hooks_dir}" ] && exit 1 ) && cd "${hooks_dir}"
+		exit_code="$?"
+		if [[ "${exit_code}" != "0" ]]; then
+			# mimicks behavior in hooks.py
+			debug-print "This hook path could not be found; ignored: ${hooks_dir}"
+		else
+			mkdir "${hooks_tmpdir}" && source "${HOOKS_SH_BINARY}" --action "${EBUILD_PHASE}" --target "${EBUILD}"
+			exit_code="$?"
+			if [[ "${exit_code}" != "0" ]]; then
+				# mimicks behavior in hooks.py
+				die "Hook directory ${HOOKS_PATH}/pre-ebuild.d failed with exit code ${exit_code}"
+			fi
+		fi
+		cd "${oldwd}" || die "Could not return to the old ebuild directory after pre-ebuild hooks: ${oldwd}"
+	fi
+	
+	return
+fi
 
 # Local variables listed here.
 # Using the local keyword makes no difference since this script is being sourced
