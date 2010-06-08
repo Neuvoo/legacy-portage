@@ -32,6 +32,7 @@ class HookDirectory(object):
 		
 		if not os.path.exists(path):
 			if self.myopts and "--debug" in self.myopts:
+				# behavior mimicked ebuild.sh
 				self.output.ewarn('This hook path could not be found; ignored: ' + path)
 			return
 		
@@ -53,6 +54,7 @@ class HookDirectory(object):
 					self.output.einfo('Executing hooks directory "' + self.path + '"...')
 				code = spawn(mycommand=command, env=self.settings.environ())
 				if code: # if failure
+					# behavior mimicked ebuild.sh
 					raise PortageException('!!! Hook directory %s failed with exit code %s' % (self.path, code))
 					
 				if os.path.exists(tmpdir+'/settings/'):

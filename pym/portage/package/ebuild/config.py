@@ -169,6 +169,7 @@ class config(object):
 		"EBUILD_PHASE", "ECLASSDIR", "ECLASS_DEPTH", "ED",
 		"EMERGE_FROM", "EPREFIX", "EROOT",
 		"FEATURES", "FILESDIR", "HOME", "NOCOLOR", "PATH",
+		"HOOKS_PATH", "HOOKS_SH_BINARY",
 		"PKGDIR",
 		"PKGUSE", "PKG_LOGDIR", "PKG_TMPDIR",
 		"PORTAGE_ACTUAL_DISTDIR", "PORTAGE_ARCHLIST",
@@ -761,6 +762,8 @@ class config(object):
 
 			self["PORTAGE_CONFIGROOT"] = config_root
 			self.backup_changes("PORTAGE_CONFIGROOT")
+			self["HOOKS_PATH"] = HOOKS_PATH
+			self.backup_changes("HOOKS_PATH")
 			self["ROOT"] = target_root
 			self.backup_changes("ROOT")
 
@@ -986,6 +989,8 @@ class config(object):
 
 			self["PORTAGE_BIN_PATH"] = PORTAGE_BIN_PATH
 			self.backup_changes("PORTAGE_BIN_PATH")
+			self["HOOKS_BIN_PATH"] = HOOKS_BIN_PATH
+			self.backup_changes("HOOKS_BIN_PATH")
 			self["PORTAGE_PYM_PATH"] = PORTAGE_PYM_PATH
 			self.backup_changes("PORTAGE_PYM_PATH")
 
