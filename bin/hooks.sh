@@ -70,7 +70,9 @@ done
 
 for (( i = 0 ; i < ${#hook_files[@]} ; i++ )); do
 	hook="${hook_files[$i]}"
-	if [[ ! -f "${hook}" ]]; then
+	if [[ ! -e "${hook}" ]]; then
+		continue
+	elif [[ ! -f "${hook}" ]]; then
 		[ "${hook_verbosity}" -gt 0 ] && ewarn "Only files are recognized in a hook directory: ${hook}"
 		continue
 	fi

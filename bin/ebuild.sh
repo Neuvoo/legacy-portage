@@ -136,7 +136,7 @@ useq() {
 		# TODO: Add a registration interface for eclasses to register
 		# any number of phase hooks, so that global scope eclass
 		# initialization can by migrated to phase hooks in new EAPIs.
-		# Example: add_phase_hook before pkg_setup $ECLASS_pre_pkg_setup
+		# Example: register_phase_hook before pkg_setup $ECLASS_pre_pkg_setup
 		#if [[ -n $EAPI ]] && ! hasq "$EAPI" 0 1 2 3 ; then
 		#	die "use() called during invalid phase: $EBUILD_PHASE"
 		#fi
@@ -280,6 +280,32 @@ register_success_hook() {
 	for x in $* ; do
 		hasq $x $EBUILD_SUCCESS_HOOKS || \
 			export EBUILD_SUCCESS_HOOKS="$EBUILD_SUCCESS_HOOKS $x"
+	done
+}
+
+register_phase_hook() {
+	if [ -z "$3" ]; then
+		echo "!!! register_phase_hook() called without enough parameters." >&2
+		echo "!!! register_phase_hook <before|after> <phase|all> <cmd>" >&2
+		return 1
+	fi
+	local x when phase cmd cmdargs
+	when="$(echo $1 | tr 'a-z' 'A-Z')"; shift # uppercase when
+	phase="$(echo $1 | tr 'A-Z' 'a-z')"; shift # lowercase phase name (to match real phase names)
+
+	case "${when}" in
+		BEFORE|AFTER)
+			: # allowed
+			;;
+		*)
+			echo "!!! register_phase_hook() called with invalid when parameter: $when" >&2
+			return 1
+			;;
+	esac
+	
+	for x in $* ; do
+		hasq $x $(eval 'echo $EBUILD_PHASE_HOOKS_'"${when}"'_'"${phase}") || \
+			export EBUILD_PHASE_HOOKS_"${when}"_"${phase}"+="${x} "
 	done
 }
 
@@ -655,17 +681,47 @@ _eapi4_src_install() {
 }
 
 ebuild_phase() {
-	declare -F "$1" >/dev/null && qa_call $1
-	# Process post-ebuild hooks for the actual phase (and not internal pre/post phase hooks)
-	[[ "$(expr match $1 '^pre_\|^post_')" == "0" ]] && source "${HOOKS_SH_BINARY}" --do-post-ebuild
+	local x phase_name=${1} pre_phase_hooks post_phase_hooks
+
+	# only run new-style hooks if this function isn't being used to
+	# execute an old-style phase hook (which causes duplicate new-style
+	# hook calls)
+	if [[ "$(expr match $1 '^pre_\|^post_')" == "0" ]]; then
+		pre_phase_hooks="$(eval 'echo $EBUILD_PHASE_HOOKS_BEFORE_'"${phase_name}") $EBUILD_PHASE_HOOKS_BEFORE_all"
+		post_phase_hooks="$(eval 'echo $EBUILD_PHASE_HOOKS_AFTER_'"${phase_name}") $EBUILD_PHASE_HOOKS_AFTER_all"
+	fi
+	
+	for x in \
+		$pre_phase_hooks \
+		${phase_name} \
+		$post_phase_hooks
+	do
+		exec_ebuild_phase ${x}
+	done
 }
 
+# TODO: deprecate this function? Should be easy to provide backwards
+# compatibility:
+# register_phase_hook before <phase> pre_<phase>
+# register_phase_hook after <phase> post_<phase>
 ebuild_phase_with_hooks() {
 	local x phase_name=${1}
 	[ -n "$EBUILD_PHASE" ] && rm -f "$T/logging/$EBUILD_PHASE"
-	for x in {pre_,,post_}${phase_name} ; do
-		ebuild_phase ${x}
+	for x in \
+		$(eval 'echo $EBUILD_PHASE_HOOKS_BEFORE_'"${phase_name}") \
+		$EBUILD_PHASE_HOOKS_BEFORE_all \
+		pre_${phase_name} \
+		${phase_name} \
+		$(eval 'echo $EBUILD_PHASE_HOOKS_AFTER_'"${phase_name}") \
+		$EBUILD_PHASE_HOOKS_AFTER_all \
+		post_${phase_name}
+	do
+		exec_ebuild_phase ${x}
 	done
+}
+
+exec_ebuild_phase() {
+	declare -F "$1" >/dev/null && qa_call $1
 }
 
 dyn_pretend() {
@@ -1762,8 +1818,15 @@ preprocess_ebuild_env() {
 	return ${retval}
 }
 
-# Process pre-ebuild hook
-source "${HOOKS_SH_BINARY}" --do-pre-ebuild
+# Portage hooks
+portage_hooks_pre_ebuild() {
+	source "${HOOKS_SH_BINARY}" --do-pre-ebuild || return $?
+}
+portage_hooks_post_ebuild() {
+	source "${HOOKS_SH_BINARY}" --do-post-ebuild || return $?
+}
+register_phase_hook before all portage_hooks_pre_ebuild
+register_phase_hook after all portage_hooks_post_ebuild
 
 # === === === === === === === === === === === === === === === === === ===
 # === === === === === functions end, main part begins === === === === ===
