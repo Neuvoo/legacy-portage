@@ -21,7 +21,6 @@ import time
 
 import portage
 portage.proxy.lazyimport.lazyimport(globals(),
-	'portage.package.ebuild.const:HOOKS_SH_BINARY',
 	'portage.package.ebuild.config:check_config_instance',
 	'portage.package.ebuild.digestcheck:digestcheck',
 	'portage.package.ebuild.digestgen:digestgen',
@@ -45,7 +44,6 @@ from portage.elog.messages import eerror, eqawarn
 from portage.exception import DigestException, FileNotFound, \
 	IncorrectParameter, InvalidAtom, InvalidDependString, PermissionDenied, \
 	UnsupportedAPIException
-from portage.hooks import HookDirectory
 from portage.localization import _
 from portage.manifest import Manifest
 from portage.output import style_to_ansi_code
@@ -1043,7 +1041,7 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			# If necessary, depend phase has been triggered by aux_get calls
 			# and the exemption is no longer needed.
 			portage._doebuild_manifest_exempt_depend -= 1
-		
+
 def _validate_deps(mysettings, myroot, mydo, mydbapi):
 
 	invalid_dep_exempt_phases = \
