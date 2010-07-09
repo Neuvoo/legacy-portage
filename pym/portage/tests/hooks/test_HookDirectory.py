@@ -10,13 +10,6 @@ from portage.tests import TestCase
 from tempfile import mkdtemp
 from shutil import rmtree
 
-# http://stackoverflow.com/questions/845058/how-to-get-line-count-cheaply-in-python
-def file_len(fname):
-    with open(fname) as f:
-        for i, l in enumerate(f):
-            pass
-    return i + 1
-
 class HookDirectoryTestCase(TestCase):
 	
 	def testHookDirectory(self):
@@ -32,10 +25,7 @@ class HookDirectoryTestCase(TestCase):
 			settings["FEATURES"] += " hooks"
 			hooks = HookDirectory(phase='test', settings=settings)
 			hooks.execute()
-			self.assert_(settings["test"] == "this is another test")
-			self.assert_(settings["test2"] == "this is a second test")
 			self.assert_(settings["hookonlytest"] == "")
-			self.assert_(file_len(self.tmp_dir_path+'/output') == 2)
 		finally:
 			rmtree(self.tmp_dir_path)
 	
@@ -46,20 +36,14 @@ class HookDirectoryTestCase(TestCase):
 		
 		f = open(hooks_dir+'/1-testhook', 'w')
 		f.write('#!/bin/bash\n')
-		f.write('test="this is a test"\n')
-		f.write('hookonlytest="portage cannot see me!"\n')
-		f.write('echo hi >> '+tmp_dir+'/output && hooks_savesetting test && hooks_saveenvonly hookonlytest\n')
-		f.write('exit $?\n')
+		f.write('export hookonlytest="portage cannot see me!"\n')
+		f.write('exit 0\n')
 		f.close()
 		
 		f = open(hooks_dir+'/2-testhook', 'w')
 		f.write('#!/bin/bash\n')
-		f.write('if [[ "${test}" != "this is a test" ]]; then echo "Unexpected test value: ${test}"; exit 3; fi\n');
-		f.write('if [[ "${hookonlytest}" != "portage cannot see me!" ]]; then echo "Unexpected hookonlytest value: ${hookonlytest}"; exit 3; fi\n');
-		f.write('test="this is another test"\n')
-		f.write('test2="this is a second test"\n')
-		f.write('echo hey >> '+tmp_dir+'/output && hooks_savesetting test && hooks_savesetting test2\n')
-		f.write('exit $?\n')
+		f.write('if [[ "${hookonlytest}" != "" ]]; then echo "Unexpected hookonlytest value: ${hookonlytest}"; exit 1; fi\n');
+		f.write('exit 0\n')
 		f.close()
 		
 		return tmp_dir

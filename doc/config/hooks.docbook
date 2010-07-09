@@ -35,11 +35,6 @@
 		</para>
 		
 		<para>
-		If a hook needs a temporary directory, create one inside of
-		the directory indicated by the HOOKS_TMPDIR bash variable.
-		</para>
-		
-		<para>
 		Some hook types have slightly different usage. See <quote>
 		<link linkend='config-hooks-locations' endterm="config-hooks-locations.title"/></quote> for more
 		information.

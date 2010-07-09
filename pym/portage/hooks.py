@@ -50,21 +50,13 @@ class HookDirectory(object):
 				for mytarget in self.mytargets:
 					command.extend(['--target', mytarget])
 			
-			tmpdir = mkdtemp()
-			try:
-				command=[BASH_BINARY, '-c', 'cd "'+path+'" && source "' + PORTAGE_BIN_PATH + '/isolated-functions.sh" && declare -x HOOKS_TMPDIR="'+tmpdir+'" && source ' + ' '.join(command)]
-				if self.myopts and "--verbose" in self.myopts:
-					self.output.einfo('Executing hooks directory "' + self.path + '"...')
-				code = spawn(mycommand=command, env=self.settings.environ())
-				if code: # if failure
-					# behavior mimicked by hook.sh
-					raise PortageException('!!! Hook directory %s failed with exit code %s' % (self.path, code))
-					
-				if os.path.exists(tmpdir+'/settings/'):
-					self.settings = self.merge_to_env (self.settings, tmpdir+'/settings/')
-				
-			finally:
-				rmtree(tmpdir)
+			command=[BASH_BINARY, '-c', 'cd "'+path+'" && source "' + PORTAGE_BIN_PATH + '/isolated-functions.sh" && source ' + ' '.join(command)]
+			if self.myopts and "--verbose" in self.myopts:
+				self.output.einfo('Executing hooks directory "' + self.path + '"...')
+			code = spawn(mycommand=command, env=self.settings.environ())
+			if code: # if failure
+				# behavior mimicked by hook.sh
+				raise PortageException('!!! Hook directory %s failed with exit code %s' % (self.path, code))
 		
 		else:
 			raise InvalidLocation('This hook path ought to be a directory: ' + path)

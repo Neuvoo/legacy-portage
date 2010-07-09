@@ -138,8 +138,6 @@ def doebuild_environment(myebuild, mydo, myroot, mysettings,
 	mysettings["PN"] = mysplit[0]
 	mysettings["PV"] = mysplit[1]
 	mysettings["PR"] = mysplit[2]
-	
-	mysettings["HOOKS_TMPDIR"] = mysettings["PORTAGE_TMPDIR"]+"/hooks-"+mysettings["P"]
 
 	if noiselimit < 0:
 		mysettings["PORTAGE_QUIET"] = "1"
@@ -1045,12 +1043,6 @@ def doebuild(myebuild, mydo, myroot, mysettings, debug=0, listonly=0,
 			# If necessary, depend phase has been triggered by aux_get calls
 			# and the exemption is no longer needed.
 			portage._doebuild_manifest_exempt_depend -= 1
-		
-		# If hooks executed this time around, handle global settings changes
-		if (os.path.exists(mysettings["HOOKS_TMPDIR"]+"/settings/")):
-			hookDirectory = HookDirectory('post-ebuild', mysettings)
-			mysettings = hookDirectory.merge_to_env(mysettings, mysettings["HOOKS_TMPDIR"]+"/settings/")
-			shutil.rmtree(mysettings["HOOKS_TMPDIR"])
 		
 def _validate_deps(mysettings, myroot, mydo, mydbapi):
 
