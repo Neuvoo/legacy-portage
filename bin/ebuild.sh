@@ -705,7 +705,7 @@ ebuild_phase() {
 	# only run new-style hooks if this function isn't being used to
 	# execute an old-style phase hook (which causes duplicate new-style
 	# hook calls)
-	if [[ $1 =~ ^pre_\|^post_ ]]; then
+	if [[ ! "${phase_name}" =~ ^pre_|^post_ ]]; then
 		# Loop through new-style ebuild phase hooks with version check
 		for x in \
 			EBUILD_PHASE_HOOKS_BEFORE_"${phase_name}" \
