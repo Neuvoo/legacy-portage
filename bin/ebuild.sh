@@ -284,12 +284,12 @@ register_success_hook() {
 }
 
 register_phase_hook() {
-	if [ -z "$3" ]; then
+	if [[ -z "$3" ]]; then
 		echo "!!! register_phase_hook() called without enough parameters." >&2
 		echo "!!! register_phase_hook <before|after> <phase|all> <cmd>" >&2
 		return 1
 	fi
-	local x when phase cmd cmdargs
+	local x when phase cmd cmdargs phase_hooks
 	when="$(echo $1 | tr 'a-z' 'A-Z')"; shift # uppercase when
 	phase="$(echo $1 | tr 'A-Z' 'a-z')"; shift # lowercase phase name (to match real phase names)
 
@@ -303,10 +303,29 @@ register_phase_hook() {
 			;;
 	esac
 	
+	phase_hooks="$(eval 'echo $EBUILD_PHASE_HOOKS_'"${when}"'_'"${phase}")"
+	
+	if [[ -z "${phase_hooks}" ]]; then
+		phase_hooks="0 "
+	elif ! _is_phase_hook_at_version "${phase_hooks}" 0; then
+		echo "!!! Unsupported ebuild phase hook version"
+		return $?
+	fi
+	
 	for x in $* ; do
-		hasq $x $(eval 'echo $EBUILD_PHASE_HOOKS_'"${when}"'_'"${phase}") || \
-			export EBUILD_PHASE_HOOKS_"${when}"_"${phase}"+="${x} "
+		hasq $x ${phase_hooks} || \
+			phase_hooks+="${x} "
 	done
+	
+	export EBUILD_PHASE_HOOKS_"${when}"_"${phase}"="${phase_hooks}"
+}
+
+_is_phase_hook_at_version() {
+	if [[ "${1:0:1}" == "$2" ]]; then
+		return 0
+	else
+		return 1
+	fi
 }
 
 # Ensure that $PWD is sane whenever possible, to protect against
@@ -707,14 +726,31 @@ ebuild_phase() {
 ebuild_phase_with_hooks() {
 	local x phase_name=${1}
 	[ -n "$EBUILD_PHASE" ] && rm -f "$T/logging/$EBUILD_PHASE"
+
+	# Loop through new-style ebuild phase hooks with version check
+	for x in \
+		EBUILD_PHASE_HOOKS_BEFORE_"${phase_name}" \
+		EBUILD_PHASE_HOOKS_BEFORE_all \
+		EBUILD_PHASE_HOOKS_AFTER_"${phase_name}" \
+		EBUILD_PHASE_HOOKS_AFTER_all
+	do
+		x="$(eval 'echo $'${x})"
+		if [[ "${x}" == "" ]]; then
+			continue
+		fi
+		if ! _is_phase_hook_at_version "${x}" 0; then
+			echo "!!! Unsupported ebuild phase hook version"
+			return 1
+		fi
+	done
+	
+	# Loop through all hooks and the actual phase
 	for x in \
 		$(eval 'echo $EBUILD_PHASE_HOOKS_BEFORE_'"${phase_name}") \
 		$EBUILD_PHASE_HOOKS_BEFORE_all \
-		pre_${phase_name} \
-		${phase_name} \
+		{pre_,,post_}${phase_name} \
 		$(eval 'echo $EBUILD_PHASE_HOOKS_AFTER_'"${phase_name}") \
-		$EBUILD_PHASE_HOOKS_AFTER_all \
-		post_${phase_name}
+		$EBUILD_PHASE_HOOKS_AFTER_all
 	do
 		exec_ebuild_phase ${x}
 	done
