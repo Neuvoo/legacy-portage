@@ -60,19 +60,3 @@ class HookDirectory(object):
 		
 		else:
 			raise InvalidLocation('This hook path ought to be a directory: ' + path)
-	
-	def merge_to_env (self, existingenv, path):
-		path = normalize_path(path)
-
-		if not os.path.isdir(path):
-			raise InvalidLocation('This environment path is not a directory: ' + path)
-		
-		for parent, dirs, files in os.walk(path):
-			for varname in files:
-				file = open(os.path.join(path, varname), 'r')
-				# read the file, remove the very last newline, and make the escaped double-quotes just plain double-quotes (since only bash needs them to be escaped, not python)
-				vardata = file.read()[:-1].replace('\"','"').strip('"')
-				existingenv[varname] = vardata
-				existingenv.backup_changes(varname)
-		
-		return existingenv
