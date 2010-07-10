@@ -706,6 +706,22 @@ ebuild_phase() {
 	# execute an old-style phase hook (which causes duplicate new-style
 	# hook calls)
 	if [[ "$(expr match $1 '^pre_\|^post_')" == "0" ]]; then
+		# Loop through new-style ebuild phase hooks with version check
+		for x in \
+			EBUILD_PHASE_HOOKS_BEFORE_"${phase_name}" \
+			EBUILD_PHASE_HOOKS_BEFORE_all \
+			EBUILD_PHASE_HOOKS_AFTER_"${phase_name}" \
+			EBUILD_PHASE_HOOKS_AFTER_all
+		do
+			x="$(eval 'echo $'${x})"
+			if [[ "${x}" == "" ]]; then
+				continue
+			fi
+			if ! _is_phase_hook_at_version "${x}" 0; then
+				echo "!!! Unsupported ebuild phase hook version"
+				return 1
+			fi
+		done
 		pre_phase_hooks="$(eval 'echo $EBUILD_PHASE_HOOKS_BEFORE_'"${phase_name}") $EBUILD_PHASE_HOOKS_BEFORE_all"
 		post_phase_hooks="$(eval 'echo $EBUILD_PHASE_HOOKS_AFTER_'"${phase_name}") $EBUILD_PHASE_HOOKS_AFTER_all"
 	fi
