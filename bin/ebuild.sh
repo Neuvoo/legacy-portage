@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 1999-2009 Gentoo Foundation
+# Copyright 1999-2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
 PORTAGE_BIN_PATH="${PORTAGE_BIN_PATH:-/usr/lib/portage/bin}"
@@ -53,10 +53,6 @@ qa_call() {
 		eqawarn "QA Notice: Global IFS changed and was not restored while calling '$*'"
 	return $retval
 }
-
-# Subshell/helper die support (must export for the die helper).
-export EBUILD_MASTER_PID=$$
-trap 'exit 1' SIGTERM
 
 EBUILD_SH_ARGS="$*"
 
@@ -163,10 +159,13 @@ has_version() {
 		die "portageq calls (has_version calls portageq) are not allowed in the global scope"
 	fi
 
-	# Set EPYTHON variable as empty so that portageq doesn't try
-	# to use potentially unsupported version of Python.
-	EPYTHON= PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
-	"${PORTAGE_BIN_PATH}"/portageq has_version "${ROOT}" "$1"
+	if [[ -n $PORTAGE_IPC_DAEMON ]] ; then
+		"$PORTAGE_BIN_PATH"/ebuild-ipc has_version "$ROOT" "$1" "$USE"
+		return $?
+	fi
+
+	PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
+	"${PORTAGE_PYTHON:-/usr/bin/python}" "${PORTAGE_BIN_PATH}/portageq" has_version "${ROOT}" "$1"
 	local retval=$?
 	case "${retval}" in
 		0)
@@ -186,10 +185,8 @@ portageq() {
 		die "portageq calls are not allowed in the global scope"
 	fi
 
-	# Set EPYTHON variable as empty so that portageq doesn't try
-	# to use potentially unsupported version of Python.
-	EPYTHON= PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
-	"${PORTAGE_BIN_PATH}/portageq" "$@"
+	PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
+	"${PORTAGE_PYTHON:-/usr/bin/python}" "${PORTAGE_BIN_PATH}/portageq" "$@"
 }
 
 
@@ -205,10 +202,13 @@ best_version() {
 		die "portageq calls (best_version calls portageq) are not allowed in the global scope"
 	fi
 
-	# Set EPYTHON variable as empty so that portageq doesn't try
-	# to use potentially unsupported version of Python.
-	EPYTHON= PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
-	"${PORTAGE_BIN_PATH}/portageq" 'best_version' "${ROOT}" "$1"
+	if [[ -n $PORTAGE_IPC_DAEMON ]] ; then
+		"$PORTAGE_BIN_PATH"/ebuild-ipc best_version "$ROOT" "$1" "$USE"
+		return $?
+	fi
+
+	PYTHONPATH=${PORTAGE_PYM_PATH}${PYTHONPATH:+:}${PYTHONPATH} \
+	"${PORTAGE_PYTHON:-/usr/bin/python}" "${PORTAGE_BIN_PATH}/portageq" 'best_version' "${ROOT}" "$1"
 	local retval=$?
 	case "${retval}" in
 		0)
@@ -334,10 +334,6 @@ _is_phase_hook_at_version() {
 if ! hasq "$EBUILD_PHASE" clean cleanrm depend help ; then
 	cd "$PORTAGE_BUILDDIR" || \
 		die "PORTAGE_BUILDDIR does not exist: '$PORTAGE_BUILDDIR'"
-else
-	# Don't try to create this when it's parent
-	# directory doesn't necessarily exist.
-	unset EBUILD_EXIT_STATUS_FILE
 fi
 
 #if no perms are specified, dirs/files will have decent defaults
@@ -352,6 +348,8 @@ export EXEOPTIONS="-m0755"
 export LIBOPTIONS="-m0644"
 export DIROPTIONS="-m0755"
 export MOPREFIX=${PN}
+declare -a PORTAGE_DOCOMPRESS=( /usr/share/{doc,info,man} )
+declare -a PORTAGE_DOCOMPRESS_SKIP=( /usr/share/doc/${PF}/html )
 
 # adds ".keep" files so that dirs aren't auto-cleaned
 keepdir() {
@@ -397,7 +395,7 @@ unpack() {
 		_unpack_tar() {
 			if [ "${y}" == "tar" ]; then
 				$1 -dc "$srcdir$x" | tar xof -
-				assert "$myfail"
+				assert_sigpipe_ok "$myfail"
 			else
 				$1 -dc "${srcdir}${x}" > ${x%.*} || die "$myfail"
 			fi
@@ -413,7 +411,7 @@ unpack() {
 				;;
 			tbz|tbz2)
 				bzip2 -dc "$srcdir$x" | tar xof -
-				assert "$myfail"
+				assert_sigpipe_ok "$myfail"
 				;;
 			ZIP|zip|jar)
 				unzip -qo "${srcdir}${x}" || die "$myfail"
@@ -524,6 +522,11 @@ econf() {
 
 	: ${ECONF_SOURCE:=.}
 	if [ -x "${ECONF_SOURCE}/configure" ]; then
+		if [[ -n $CONFIG_SHELL && \
+			"$(head -n1 "$ECONF_SOURCE/configure")" =~ ^'#!'[[:space:]]*/bin/sh([[:space:]]|$) ]] ; then
+			sed -e "1s:^#![[:space:]]*/bin/sh:#!$CONFIG_SHELL:" -i "$ECONF_SOURCE/configure" || \
+				die "Substition of shebang in '$ECONF_SOURCE/configure' failed"
+		fi
 		if [ -e /usr/share/gnuconfig/ ]; then
 			find "${WORKDIR}" -type f '(' \
 			-name config.guess -o -name config.sub ')' -print0 | \
@@ -854,9 +857,11 @@ dyn_clean() {
 	fi
 
 	if [[ $EMERGE_FROM = binary ]] || ! hasq keepwork $FEATURES; then
-		rm -f "$PORTAGE_BUILDDIR"/.{ebuild_changed,exit_status,logid,unpacked,prepared} \
+		rm -f "$PORTAGE_BUILDDIR"/.{ebuild_changed,logid,unpacked,prepared} \
 			"$PORTAGE_BUILDDIR"/.{configured,compiled,tested,packaged} \
-			"$PORTAGE_BUILDDIR"/.die_hooks
+			"$PORTAGE_BUILDDIR"/.die_hooks \
+			"$PORTAGE_BUILDDIR"/.ipc_{in,out,lock} \
+			"$PORTAGE_BUILDDIR"/.exit_status
 
 		rm -rf "${PORTAGE_BUILDDIR}/build-info"
 		rm -rf "${WORKDIR}"
@@ -885,6 +890,11 @@ into() {
 		export DESTTREE=$1
 		if [ ! -d "${D}${DESTTREE}" ]; then
 			install -d "${D}${DESTTREE}"
+			local ret=$?
+			if [[ $ret -ne 0 ]] ; then
+				helpers_die "${FUNCNAME[0]} failed"
+				return $ret
+			fi
 		fi
 	fi
 }
@@ -896,6 +906,11 @@ insinto() {
 		export INSDESTTREE=$1
 		if [ ! -d "${D}${INSDESTTREE}" ]; then
 			install -d "${D}${INSDESTTREE}"
+			local ret=$?
+			if [[ $ret -ne 0 ]] ; then
+				helpers_die "${FUNCNAME[0]} failed"
+				return $ret
+			fi
 		fi
 	fi
 }
@@ -907,6 +922,11 @@ exeinto() {
 		export _E_EXEDESTTREE_="$1"
 		if [ ! -d "${D}${_E_EXEDESTTREE_}" ]; then
 			install -d "${D}${_E_EXEDESTTREE_}"
+			local ret=$?
+			if [[ $ret -ne 0 ]] ; then
+				helpers_die "${FUNCNAME[0]} failed"
+				return $ret
+			fi
 		fi
 	fi
 }
@@ -918,6 +938,11 @@ docinto() {
 		export _E_DOCDESTTREE_="$1"
 		if [ ! -d "${D}usr/share/doc/${PF}/${_E_DOCDESTTREE_}" ]; then
 			install -d "${D}usr/share/doc/${PF}/${_E_DOCDESTTREE_}"
+			local ret=$?
+			if [[ $ret -ne 0 ]] ; then
+				helpers_die "${FUNCNAME[0]} failed"
+				return $ret
+			fi
 		fi
 	fi
 }
@@ -945,6 +970,32 @@ libopts() {
 
 	# `install` should never be called with '-s' ...
 	hasq -s ${LIBOPTIONS} && die "Never call libopts() with -s"
+}
+
+docompress() {
+	hasq "${EAPI}" 0 1 2 3 && die "'docompress' not supported in this EAPI"
+
+	local f g
+	if [[ $1 = "-x" ]]; then
+		shift
+		for f; do
+			f=$(strip_duplicate_slashes "${f}"); f=${f%/}
+			[[ ${f:0:1} = / ]] || f="/${f}"
+			for g in "${PORTAGE_DOCOMPRESS_SKIP[@]}"; do
+				[[ ${f} = ${g} ]] && continue 2
+			done
+			PORTAGE_DOCOMPRESS_SKIP[${#PORTAGE_DOCOMPRESS_SKIP[@]}]=${f}
+		done
+	else
+		for f; do
+			f=$(strip_duplicate_slashes "${f}"); f=${f%/}
+			[[ ${f:0:1} = / ]] || f="/${f}"
+			for g in "${PORTAGE_DOCOMPRESS[@]}"; do
+				[[ ${f} = ${g} ]] && continue 2
+			done
+			PORTAGE_DOCOMPRESS[${#PORTAGE_DOCOMPRESS[@]}]=${f}
+		done
+	fi
 }
 
 abort_handler() {
@@ -1191,7 +1242,7 @@ dyn_install() {
 	set -f
 	local f x
 	IFS=$' \t\n\r'
-	for f in CATEGORY DEFINED_PHASES FEATURES INHERITED IUSE  \
+	for f in CATEGORY DEFINED_PHASES FEATURES INHERITED IUSE REQUIRED_USE \
 		PF PKGUSE SLOT KEYWORDS HOMEPAGE DESCRIPTION ; do
 		x=$(echo -n ${!f})
 		[[ -n $x ]] && echo "$x" > $f
@@ -1365,6 +1416,7 @@ inherit() {
 	local prev_export_funcs_var=$__export_funcs_var
 
 	local B_IUSE
+	local B_REQUIRED_USE
 	local B_DEPEND
 	local B_RDEPEND
 	local B_PDEPEND
@@ -1413,12 +1465,13 @@ inherit() {
 		set -f
 
 		# Retain the old data and restore it later.
-		unset B_IUSE B_DEPEND B_RDEPEND B_PDEPEND
+		unset B_IUSE B_REQUIRED_USE B_DEPEND B_RDEPEND B_PDEPEND
 		[ "${IUSE+set}"       = set ] && B_IUSE="${IUSE}"
+		[ "${REQUIRED_USE+set}" = set ] && B_REQUIRED_USE="${REQUIRED_USE}"
 		[ "${DEPEND+set}"     = set ] && B_DEPEND="${DEPEND}"
 		[ "${RDEPEND+set}"    = set ] && B_RDEPEND="${RDEPEND}"
 		[ "${PDEPEND+set}"    = set ] && B_PDEPEND="${PDEPEND}"
-		unset IUSE DEPEND RDEPEND PDEPEND
+		unset IUSE REQUIRED_USE DEPEND RDEPEND PDEPEND
 		#turn on glob expansion
 		set +f
 
@@ -1430,12 +1483,16 @@ inherit() {
 		# If each var has a value, append it to the global variable E_* to
 		# be applied after everything is finished. New incremental behavior.
 		[ "${IUSE+set}"       = set ] && export E_IUSE="${E_IUSE} ${IUSE}"
+		[ "${REQUIRED_USE+set}"       = set ] && export E_REQUIRED_USE="${E_REQUIRED_USE} ${REQUIRED_USE}"
 		[ "${DEPEND+set}"     = set ] && export E_DEPEND="${E_DEPEND} ${DEPEND}"
 		[ "${RDEPEND+set}"    = set ] && export E_RDEPEND="${E_RDEPEND} ${RDEPEND}"
 		[ "${PDEPEND+set}"    = set ] && export E_PDEPEND="${E_PDEPEND} ${PDEPEND}"
 
 		[ "${B_IUSE+set}"     = set ] && IUSE="${B_IUSE}"
 		[ "${B_IUSE+set}"     = set ] || unset IUSE
+		
+		[ "${B_REQUIRED_USE+set}"     = set ] && REQUIRED_USE="${B_REQUIRED_USE}"
+		[ "${B_REQUIRED_USE+set}"     = set ] || unset REQUIRED_USE
 
 		[ "${B_DEPEND+set}"   = set ] && DEPEND="${B_DEPEND}"
 		[ "${B_DEPEND+set}"   = set ] || unset DEPEND
@@ -1705,7 +1762,7 @@ source_all_bashrcs() {
 # when portage is upgrading itself.
 
 READONLY_EBUILD_METADATA="DEFINED_PHASES DEPEND DESCRIPTION
-	EAPI HOMEPAGE INHERITED IUSE KEYWORDS LICENSE
+	EAPI HOMEPAGE INHERITED IUSE REQUIRED_USE KEYWORDS LICENSE
 	PDEPEND PROVIDE RDEPEND RESTRICT SLOT SRC_URI"
 
 READONLY_PORTAGE_VARS="D EBUILD EBUILD_PHASE \
@@ -1792,7 +1849,7 @@ filter_readonly_variables() {
 		filtered_vars="${filtered_vars} ${filtered_sandbox_vars}"
 	fi
 	if hasq --filter-features $* ; then
-		filtered_vars="${filtered_vars} FEATURES"
+		filtered_vars="${filtered_vars} FEATURES PORTAGE_FEATURES"
 	fi
 	if hasq --filter-path $* ; then
 		filtered_vars+=" PATH"
@@ -1810,7 +1867,7 @@ filter_readonly_variables() {
 		"
 	fi
 
-	EPYTHON= "${PORTAGE_BIN_PATH}"/filter-bash-environment.py "${filtered_vars}" || die "filter-bash-environment.py failed"
+	"${PORTAGE_PYTHON:-/usr/bin/python}" "${PORTAGE_BIN_PATH}"/filter-bash-environment.py "${filtered_vars}" || die "filter-bash-environment.py failed"
 }
 
 # @FUNCTION: preprocess_ebuild_env
@@ -1889,7 +1946,7 @@ register_phase_hook after all portage_hooks_post_ebuild
 export SANDBOX_ON="1"
 export S=${WORKDIR}/${P}
 
-unset E_IUSE E_DEPEND E_RDEPEND E_PDEPEND
+unset E_IUSE E_REQUIRED_USE E_DEPEND E_RDEPEND E_PDEPEND
 
 # Turn of extended glob matching so that g++ doesn't get incorrectly matched.
 shopt -u extglob
@@ -1993,7 +2050,7 @@ if ! hasq "$EBUILD_PHASE" clean cleanrm ; then
 		# In order to ensure correct interaction between ebuilds and
 		# eclasses, they need to be unset before this process of
 		# interaction begins.
-		unset DEPEND RDEPEND PDEPEND IUSE
+		unset DEPEND RDEPEND PDEPEND IUSE REQUIRED_USE
 
 		if [[ $PORTAGE_DEBUG != 1 || ${-/x/} != $- ]] ; then
 			source "$EBUILD" || die "error sourcing ebuild"
@@ -2021,8 +2078,9 @@ if ! hasq "$EBUILD_PHASE" clean cleanrm ; then
 		DEPEND="${DEPEND} ${E_DEPEND}"
 		RDEPEND="${RDEPEND} ${E_RDEPEND}"
 		PDEPEND="${PDEPEND} ${E_PDEPEND}"
-
-		unset ECLASS E_IUSE E_DEPEND E_RDEPEND E_PDEPEND
+		REQUIRED_USE="${REQUIRED_USE} ${E_REQUIRED_USE}"
+		
+		unset ECLASS E_IUSE E_REQUIRED_USE E_DEPEND E_RDEPEND E_PDEPEND 
 
 		# alphabetically ordered by $EBUILD_PHASE value
 		case "$EAPI" in
@@ -2057,11 +2115,11 @@ if ! hasq "$EBUILD_PHASE" clean cleanrm ; then
 		if [[ $EBUILD_PHASE != depend ]] ; then
 
 			case "$EAPI" in
-				4|4_pre1)
-					_ebuild_helpers_path="$PORTAGE_BIN_PATH/ebuild-helpers/4:$PORTAGE_BIN_PATH/ebuild-helpers"
+				0|1|2|3)
+					_ebuild_helpers_path="$PORTAGE_BIN_PATH/ebuild-helpers"
 					;;
 				*)
-					_ebuild_helpers_path="$PORTAGE_BIN_PATH/ebuild-helpers"
+					_ebuild_helpers_path="$PORTAGE_BIN_PATH/ebuild-helpers/4:$PORTAGE_BIN_PATH/ebuild-helpers"
 					;;
 			esac
 
@@ -2083,6 +2141,26 @@ if ! hasq "$EBUILD_PHASE" clean cleanrm ; then
 
 				[[ -n $CCACHE_SIZE ]] && ccache -M $CCACHE_SIZE &> /dev/null
 			fi
+		fi
+
+		if [[ -n $QA_PREBUILT ]] ; then
+
+			# these ones support fnmatch patterns
+			QA_EXECSTAC+=" $QA_PREBUILT"
+			QA_TEXTRELS+=" $QA_PREBUILT"
+			QA_WX_LOAD+=" $QA_PREBUILT"
+
+			# these ones support regular expressions, so translate
+			# fnmatch patterns to regular expressions
+			for x in QA_DT_HASH QA_DT_NEEDED QA_PRESTRIPPED QA_SONAME ; do
+				if [[ $(declare -p $x 2>/dev/null) = declare\ -a* ]] ; then
+					eval "$x=(\"\${$x[@]}\" ${QA_PREBUILT//\*/.*})"
+				else
+					eval "$x+=\" ${QA_PREBUILT//\*/.*}\""
+				fi
+			done
+
+			unset x
 		fi
 
 		# This needs to be exported since prepstrip is a separate shell script.
@@ -2125,6 +2203,11 @@ if [ "${EBUILD_PHASE}" != "depend" ] ; then
 fi
 
 ebuild_main() {
+
+	# Subshell/helper die support (must export for the die helper).
+	export EBUILD_MASTER_PID=$BASHPID
+	trap 'exit 1' SIGTERM
+
 	local f x
 
 	if [[ $EBUILD_PHASE != depend ]] ; then
@@ -2142,7 +2225,6 @@ ebuild_main() {
 	case ${EBUILD_SH_ARGS} in
 	nofetch)
 		ebuild_phase_with_hooks pkg_nofetch
-		exit 1
 		;;
 	prerm|postrm|postinst|config|info)
 		if hasq "$EBUILD_SH_ARGS" config info && \
@@ -2266,13 +2348,12 @@ ebuild_main() {
 		fi
 
 		auxdbkeys="DEPEND RDEPEND SLOT SRC_URI RESTRICT HOMEPAGE LICENSE
-			DESCRIPTION KEYWORDS INHERITED IUSE UNUSED_00 PDEPEND PROVIDE EAPI
+			DESCRIPTION KEYWORDS INHERITED IUSE REQUIRED_USE PDEPEND PROVIDE EAPI
 			PROPERTIES DEFINED_PHASES UNUSED_05 UNUSED_04
 			UNUSED_03 UNUSED_02 UNUSED_01"
 
 		#the extra $(echo) commands remove newlines
 		[ -n "${EAPI}" ] || EAPI=0
-		local eapi=$EAPI
 
 		if [ -n "${dbkey}" ] ; then
 			> "${dbkey}"
@@ -2287,6 +2368,8 @@ ebuild_main() {
 		fi
 		set +f
 		;;
+	_internal_test)
+		;;
 	*)
 		export SANDBOX_ON="1"
 		echo "Unrecognized EBUILD_SH_ARGS: '${EBUILD_SH_ARGS}'"
@@ -2295,10 +2378,6 @@ ebuild_main() {
 		exit 1
 		;;
 	esac
-	if [ -n "$EBUILD_EXIT_STATUS_FILE" ] ; then
-		> "$EBUILD_EXIT_STATUS_FILE" || \
-			die "failed to create '$EBUILD_EXIT_STATUS_FILE'"
-	fi
 }
 
 if [[ $EBUILD_PHASE = depend ]] ; then
@@ -2319,10 +2398,16 @@ elif [[ -n $EBUILD_SH_ARGS ]] ; then
 			chown portage:portage "$T/environment" &>/dev/null
 			chmod g+w "$T/environment" &>/dev/null
 		fi
+		[[ -n $PORTAGE_EBUILD_EXIT_FILE ]] && > "$PORTAGE_EBUILD_EXIT_FILE"
+		[[ -n $PORTAGE_IPC_DAEMON ]] && "$PORTAGE_BIN_PATH"/ebuild-ipc exit 0
 		exit 0
 	)
 	exit $?
 fi
+
+# Subshell/helper die support (must export for the die helper).
+export EBUILD_MASTER_PID=$BASHPID
+trap 'exit 1' SIGTERM
 
 # Do not exit when ebuild.sh is sourced by other scripts.
 true

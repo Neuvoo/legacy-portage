@@ -1,4 +1,4 @@
-# Copyright 1999-2009 Gentoo Foundation
+# Copyright 1999-2010 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
 from __future__ import print_function
@@ -27,16 +27,18 @@ from portage import os
 from portage import digraph
 from portage import _unicode_decode
 from portage.cache.cache_errors import CacheError
-from portage.const import NEWS_LIB_PATH
+from portage.const import GLOBAL_CONFIG_PATH, NEWS_LIB_PATH
 from portage.dbapi.dep_expand import dep_expand
 from portage.output import blue, bold, colorize, create_color_func, darkgreen, \
 	red, yellow
 good = create_color_func("GOOD")
 bad = create_color_func("BAD")
 from portage.hooks import HookDirectory
-from portage.sets import load_default_config, SETPREFIX
-from portage.sets.base import InternalPackageSet
-from portage.util import cmp_sort_key, writemsg, writemsg_level
+from portage.package.ebuild._ipc.QueryCommand import QueryCommand
+from portage._sets import load_default_config, SETPREFIX
+from portage._sets.base import InternalPackageSet
+from portage.util import cmp_sort_key, writemsg, \
+	writemsg_level, writemsg_stdout
 from portage._global_updates import _global_updates
 
 from _emerge.clear_caches import clear_caches
@@ -446,7 +448,13 @@ def action_build(settings, trees, mtimedb,
 				portage.writemsg_stdout(colorize("WARN", "WARNING:")
 					+ " AUTOCLEAN is disabled.  This can cause serious"
 					+ " problems due to overlapping packages.\n")
-			trees[settings["ROOT"]]["vartree"].dbapi.plib_registry.pruneNonExisting()
+			plib_registry = \
+				trees[settings["ROOT"]]["vartree"].dbapi._plib_registry
+			if plib_registry is None:
+				# preserve-libs is entirely disabled
+				pass
+			else:
+				plib_registry.pruneNonExisting()
 
 		return retval
 
@@ -515,7 +523,7 @@ def action_config(settings, trees, myopts, myfiles):
 	print()
 
 def action_depclean(settings, trees, ldpath_mtimes,
-	myopts, action, myfiles, spinner):
+	myopts, action, myfiles, spinner, scheduler=None):
 	# Kill packages that aren't explicitly merged or are required as a
 	# dependency of another package. World file is explicit.
 
@@ -576,7 +584,8 @@ def action_depclean(settings, trees, ldpath_mtimes,
 
 	if cleanlist:
 		unmerge(root_config, myopts, "unmerge",
-			cleanlist, ldpath_mtimes, ordered=ordered)
+			cleanlist, ldpath_mtimes, ordered=ordered,
+			scheduler=scheduler)
 
 	if action == "prune":
 		return
@@ -656,6 +665,7 @@ def calc_depclean(settings, trees, ldpath_mtimes,
 	resolver = depgraph(settings, trees, myopts, resolver_params, spinner)
 	resolver._load_vdb()
 	vardb = resolver._frozen_config.trees[myroot]["vartree"].dbapi
+	real_vardb = trees[myroot]["vartree"].dbapi
 
 	if action == "depclean":
 
@@ -871,15 +881,16 @@ def calc_depclean(settings, trees, ldpath_mtimes,
 		return pkgs_to_remove
 
 	cleanlist = create_cleanlist()
+	clean_set = set(cleanlist)
 
-	if len(cleanlist):
-		clean_set = set(cleanlist)
+	if cleanlist and \
+		real_vardb._linkmap is not None and \
+		myopts.get('--depclean-lib-check') != 'n':
 
-		# Check if any of these package are the sole providers of libraries
+		# Check if any of these packages are the sole providers of libraries
 		# with consumers that have not been selected for removal. If so, these
 		# packages and any dependencies need to be added to the graph.
-		real_vardb = trees[myroot]["vartree"].dbapi
-		linkmap = real_vardb.linkmap
+		linkmap = real_vardb._linkmap
 		consumer_cache = {}
 		provider_cache = {}
 		consumer_map = {}
@@ -908,7 +919,7 @@ def calc_depclean(settings, trees, ldpath_mtimes,
 
 			for lib, lib_consumers in list(consumers.items()):
 				for consumer_file in list(lib_consumers):
-					if pkg_dblink.isowner(consumer_file, myroot):
+					if pkg_dblink.isowner(consumer_file):
 						lib_consumers.remove(consumer_file)
 				if not lib_consumers:
 					del consumers[lib]
@@ -1058,6 +1069,7 @@ def calc_depclean(settings, trees, ldpath_mtimes,
 				return 0, [], False, required_pkgs_total
 			clean_set = set(cleanlist)
 
+	if clean_set:
 		# Use a topological sort to create an unmerge order such that
 		# each package is unmerged before it's dependencies. This is
 		# necessary to avoid breaking things that may need to run
@@ -1086,14 +1098,10 @@ def calc_depclean(settings, trees, ldpath_mtimes,
 				depstr = node.metadata[dep_type]
 				if not depstr:
 					continue
-				try:
-					portage.dep._dep_check_strict = False
-					success, atoms = portage.dep_check(depstr, None, settings,
-						myuse=node_use,
-						trees=resolver._dynamic_config._graph_trees,
-						myroot=myroot)
-				finally:
-					portage.dep._dep_check_strict = True
+				success, atoms = portage.dep_check(depstr, None, settings,
+					myuse=node_use,
+					trees=resolver._dynamic_config._graph_trees,
+					myroot=myroot)
 				if not success:
 					# Ignore invalid deps of packages that will
 					# be uninstalled anyway.
@@ -1219,6 +1227,23 @@ def action_deselect(settings, trees, opts, atoms):
 			world_set.unlock()
 	return os.EX_OK
 
+class _info_pkgs_ver(object):
+	def __init__(self, ver, repo_suffix, provide_suffix):
+		self.ver = ver
+		self.repo_suffix = repo_suffix
+		self.provide_suffix = provide_suffix
+
+	def __lt__(self, other):
+		return portage.versions.vercmp(self.ver, other.ver) < 0
+
+	def toString(self):
+		"""
+		This may return unicode if repo_name contains unicode.
+		Don't use __str__ and str() since unicode triggers compatibility
+		issues between python 2.x and 3.x.
+		"""
+		return self.ver + self.repo_suffix + self.provide_suffix
+
 def action_info(settings, trees, myopts, myfiles):
 	print(getportageversion(settings["PORTDIR"], settings["ROOT"],
 		settings.profile_path, settings["CHOST"],
@@ -1273,20 +1298,31 @@ def action_info(settings, trees, myopts, myfiles):
 			for cpv in pkg_matches:
 				ver = portage.versions.cpv_getversion(cpv)
 				repo = vardb.aux_get(cpv, ["repository"])[0]
-				if not repo:
-					repo = "<unknown repository>"
-				if repo != main_repo:
-					versions.append(ver + "::" + repo)
+				if repo == main_repo:
+					repo_suffix = ""
+				elif not repo:
+					repo_suffix = "::<unknown repository>"
 				else:
-					versions.append(ver)
+					repo_suffix = "::" + repo
+				
+				matched_cp = portage.versions.cpv_getkey(cpv)
+				if matched_cp == x:
+					provide_suffix = ""
+				else:
+					provide_suffix = " (%s)" % matched_cp
 
-			versions.sort(cmp=lambda a,b: portage.versions.vercmp(a.split("::")[0], b.split("::")[0]))
+				versions.append(
+					_info_pkgs_ver(ver, repo_suffix, provide_suffix))
+
+			versions.sort()
 
 			if versions:
-				versions = ", ".join(versions)
-				print("%-20s %s" % (x+":", versions))
+				versions = ", ".join(ver.toString() for ver in versions)
+				writemsg_stdout("%-20s %s\n" % (x+":", versions),
+					noiselevel=-1)
 		else:
-			print("%-20s %s" % (x+":", "[NOT VALID]"))
+			writemsg_stdout("%-20s %s\n" % (x+":", "[NOT VALID]"),
+				noiselevel=-1)
 
 	libtool_vers = ",".join(trees["/"]["vartree"].dbapi.match("sys-devel/libtool"))
 
@@ -1313,10 +1349,7 @@ def action_info(settings, trees, myopts, myfiles):
 	for x in myvars:
 		if x in settings:
 			if x != "USE":
-				try:
-					print('%s="%s"' % (x, settings[x]))
-				except UnicodeEncodeError:
-					print('%s=<unprintable value with representation: %s>' % (x, repr(settings[x])))
+				writemsg_stdout('%s="%s"\n' % (x, settings[x]), noiselevel=-1)
 			else:
 				use = set(settings["USE"].split())
 				for varname in use_expand:
@@ -1790,7 +1823,8 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 	myportdir = portdb.porttree_root
 	out = portage.output.EOutput()
 	if not myportdir:
-		sys.stderr.write("!!! PORTDIR is undefined.  Is /etc/make.globals missing?\n")
+		sys.stderr.write("!!! PORTDIR is undefined.  " + \
+			"Is %s/make.globals missing?\n" % GLOBAL_CONFIG_PATH)
 		sys.exit(1)
 	if myportdir[-1]=="/":
 		myportdir=myportdir[:-1]
@@ -1803,6 +1837,7 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 		os.makedirs(myportdir,0o755)
 		st = os.stat(myportdir)
 
+	usersync_uid = None
 	spawn_kwargs = {}
 	spawn_kwargs["env"] = settings.environ()
 	if 'usersync' in settings.features and \
@@ -1816,6 +1851,7 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 		else:
 			# Drop privileges when syncing, in order to match
 			# existing uid/gid settings.
+			usersync_uid = st.st_uid
 			spawn_kwargs["uid"]    = st.st_uid
 			spawn_kwargs["gid"]    = st.st_gid
 			spawn_kwargs["groups"] = [st.st_gid]
@@ -1827,7 +1863,8 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 
 	syncuri = settings.get("SYNC", "").strip()
 	if not syncuri:
-		writemsg_level("!!! SYNC is undefined. Is /etc/make.globals missing?\n",
+		writemsg_level("!!! SYNC is undefined. " + \
+			"Is %s/make.globals missing?\n" % GLOBAL_CONFIG_PATH,
 			noiselevel=-1, level=logging.ERROR)
 		return 1
 
@@ -2066,6 +2103,9 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 				from tempfile import mkstemp
 				fd, tmpservertimestampfile = mkstemp()
 				os.close(fd)
+				if usersync_uid is not None:
+					portage.util.apply_permissions(tmpservertimestampfile,
+						uid=usersync_uid)
 				mycommand = rsynccommand[:]
 				mycommand.append(dosyncuri.rstrip("/") + \
 					"/metadata/timestamp.chk")
@@ -2083,8 +2123,11 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 						signal.alarm(rsync_initial_timeout)
 					try:
 						mypids.extend(portage.process.spawn(
-							mycommand, env=settings.environ(), returnpid=True))
+							mycommand, returnpid=True, **spawn_kwargs))
 						exitcode = os.waitpid(mypids[0], 0)[1]
+						if usersync_uid is not None:
+							portage.util.apply_permissions(tmpservertimestampfile,
+								uid=os.getuid())
 						content = portage.grabfile(tmpservertimestampfile)
 					finally:
 						if rsync_initial_timeout:
@@ -2256,7 +2299,8 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 		# the only one that's been synced here.
 		action_metadata(settings, portdb, myopts, porttrees=[myportdir])
 
-	if _global_updates(trees, mtimedb["updates"]):
+	if myopts.get('--package-moves') != 'n' and \
+		_global_updates(trees, mtimedb["updates"]):
 		mtimedb.commit()
 		# Reload the whole config from scratch.
 		settings, trees, mtimedb = load_emerge_config(trees=trees)
@@ -2270,7 +2314,8 @@ def action_sync(settings, trees, mtimedb, myopts, myaction):
 		trees[settings["ROOT"]]["vartree"].dbapi.match(
 		portage.const.PORTAGE_PACKAGE_ATOM))
 
-	chk_updated_cfg_files("/", settings.get("CONFIG_PROTECT","").split())
+	chk_updated_cfg_files("/",
+		portage.util.shlex_split(settings.get("CONFIG_PROTECT", "")))
 
 	if myaction != "metadata":
 		postsync = os.path.join(settings["PORTAGE_CONFIGROOT"],
@@ -2321,7 +2366,7 @@ def action_uninstall(settings, trees, ldpath_mtimes,
 				for line in textwrap.wrap(msg, 70):
 					writemsg_level("!!! %s\n" % (line,),
 						level=logging.ERROR, noiselevel=-1)
-				for i in e[0]:
+				for i in e.args[0]:
 					writemsg_level("    %s\n" % colorize("INFORM", i),
 						level=logging.ERROR, noiselevel=-1)
 				writemsg_level("\n", level=logging.ERROR, noiselevel=-1)
@@ -2394,18 +2439,28 @@ def action_uninstall(settings, trees, ldpath_mtimes,
 		for line in textwrap.wrap(msg, 72):
 			out.ewarn(line)
 
+	if action == 'deselect':
+		return action_deselect(settings, trees, opts, valid_atoms)
+
+	# Create a Scheduler for calls to unmerge(), in order to cause
+	# redirection of ebuild phase output to logs as required for
+	# options such as --quiet.
+	sched = Scheduler(settings, trees, None, opts,
+		spinner, [], [], None)
+	sched._background = sched._background_mode()
+	sched._status_display.quiet = True
+
 	if action in ('clean', 'unmerge') or \
 		(action == 'prune' and "--nodeps" in opts):
 		# When given a list of atoms, unmerge them in the order given.
 		ordered = action == 'unmerge'
 		unmerge(trees[settings["ROOT"]]['root_config'], opts, action,
-			valid_atoms, ldpath_mtimes, ordered=ordered)
+			valid_atoms, ldpath_mtimes, ordered=ordered,
+			scheduler=sched._sched_iface)
 		rval = os.EX_OK
-	elif action == 'deselect':
-		rval = action_deselect(settings, trees, opts, valid_atoms)
 	else:
 		rval = action_depclean(settings, trees, ldpath_mtimes,
-			opts, action, valid_atoms, spinner)
+			opts, action, valid_atoms, spinner, scheduler=sched._sched_iface)
 
 	return rval
 
@@ -2422,21 +2477,15 @@ def adjust_config(myopts, settings):
 	# Kill noauto as it will break merges otherwise.
 	if "noauto" in settings.features:
 		settings.features.remove('noauto')
-		settings['FEATURES'] = ' '.join(sorted(settings.features))
-		settings.backup_changes("FEATURES")
 
 	fail_clean = myopts.get('--fail-clean')
 	if fail_clean is not None:
 		if fail_clean is True and \
 			'fail-clean' not in settings.features:
 			settings.features.add('fail-clean')
-			settings['FEATURES'] = ' '.join(sorted(settings.features))
-			settings.backup_changes('FEATURES')
 		elif fail_clean == 'n' and \
 			'fail-clean' in settings.features:
 			settings.features.remove('fail-clean')
-			settings['FEATURES'] = ' '.join(sorted(settings.features))
-			settings.backup_changes('FEATURES')
 
 	CLEAN_DELAY = 5
 	try:
@@ -2734,6 +2783,7 @@ def load_emerge_config(trees=None):
 	mtimedbfile = os.path.join(os.path.sep, settings['ROOT'], portage.CACHE_PATH, "mtimedb")
 	mtimedb = portage.MtimeDB(mtimedbfile)
 	portage.output._init(config_root=settings['PORTAGE_CONFIGROOT'])
+	QueryCommand._db = trees
 	return settings, trees, mtimedb
 
 def chk_updated_cfg_files(target_root, config_protect):
@@ -2765,10 +2815,9 @@ def display_news_notification(root_config, myopts):
 	if "news" not in settings.features:
 		return
 
-	if not settings.treeVirtuals:
-		# Populate these using our existing vartree, to avoid
-		# having a temporary one instantiated.
-		settings._populate_treeVirtuals(trees["vartree"])
+	# Populate these using our existing vartree, to avoid
+	# having a temporary one instantiated.
+	settings._populate_treeVirtuals_if_needed(trees["vartree"])
 
 	for repo in portdb.getRepositories():
 		unreadItems = checkUpdatedNewsItems(

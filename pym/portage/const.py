@@ -74,6 +74,7 @@ REPO_NAME_LOC            = "profiles" + "/" + REPO_NAME_FILE
 
 PORTAGE_PACKAGE_ATOM     = "sys-apps/portage"
 LIBC_PACKAGE_ATOM        = "virtual/libc"
+OS_HEADERS_PACKAGE_ATOM  = "virtual/os-headers"
 
 INCREMENTALS             = ("USE", "USE_EXPAND", "USE_EXPAND_HIDDEN",
                            "FEATURES", "ACCEPT_KEYWORDS",
@@ -85,17 +86,20 @@ EBUILD_PHASES            = ("pretend", "setup", "unpack", "prepare", "configure"
                            "package", "preinst", "postinst","prerm", "postrm",
                            "nofetch", "config", "info", "other")
 SUPPORTED_FEATURES       = frozenset([
-                           "assume-digests", "buildpkg", "buildsyspkg", "ccache",
-                           "collision-protect", "digest", "distcc", "distlocks",
-                           "fakeroot", "fail-clean", "fixpackages", "hooks", "getbinpkg",
-                           "installsources", "keeptemp", "keepwork", "lmirror",
+                           "assume-digests", "buildpkg", "buildsyspkg", "candy", "ccache", "hooks",
+                           "chflags", "collision-protect", "compress-build-logs",
+                           "digest", "distcc", "distlocks",
+                           "fakeroot", "fail-clean", "fixpackages", "getbinpkg",
+                           "installsources", "keeptemp", "keepwork", "fixlafiles", "lmirror",
                            "metadata-transfer", "mirror", "multilib-strict", "news",
-                           "noauto", "noclean", "nodoc", "noinfo", "noman", "nostrip"
+                           "noauto", "noclean", "nodoc", "noinfo", "noman", "nostrip",
                            "notitles", "parallel-fetch", "parse-eapi-ebuild-head",
-                           "parse-eapi-glep-55", "preserve-libs", "protect-owned",
-                           "python-trace", "sandbox", "sesandbox", "severe", "sfperms",
+                           "parse-eapi-glep-55", "prelink-checksums", "preserve-libs",
+                           "protect-owned", "python-trace", "sandbox",
+                           "selinux", "sesandbox", "severe", "sfperms",
                            "sign", "skiprocheck", "split-elog", "split-log", "splitdebug",
                            "strict", "stricter", "suidctl", "test", "test-fail-continue",
+                           "unknown-features-warn",
                            "unmerge-logs", "unmerge-orphans", "userfetch", "userpriv",
                            "usersandbox", "usersync", "webrsync-gpg"])
 

@@ -291,6 +291,17 @@ def help(myopts, havecolor=1):
 			"EMERGE_DEFAULT_OPTS variable."
 		for line in wrap(desc, desc_width):
 			print(desc_indent + line)
+		print() 
+		print("       " + green("--autounmask") + "[=%s]" % turquoise("n"))
+		desc = "Automatically unmask packages. If any configuration " + \
+			"changes are required, then they will be displayed " + \
+			"after the merge list and emerge will immediately " + \
+			"abort. If the displayed configuration changes are " + \
+			"satisfactory, you should copy and paste them into " + \
+			"the specified configuration file(s). Currently, " + \
+			"this only works for unstable KEYWORDS masks."
+		for line in wrap(desc, desc_width):
+			print(desc_indent + line)
 		print()
 		print("       " + green("--backtrack") + " " + turquoise("COUNT"))
 		desc = "Specifies an integer number of times to backtrack if " + \
@@ -378,6 +389,14 @@ def help(myopts, havecolor=1):
 		print("              Also see --with-bdeps for behavior with respect to build time")
 		print("              dependencies that are not strictly required.")
 		print() 
+		print("       " + green("--depclean-lib-check") + "[=%s]" % turquoise("n"))
+		desc = "Account for library link-level dependencies during " + \
+			"--depclean and --prune actions. This " + \
+			"option is enabled by default. In some cases this can " + \
+			"be somewhat time-consuming."
+		for line in wrap(desc, desc_width):
+			print(desc_indent + line)
+		print()
 		print("       "+green("--emptytree")+" ("+green("-e")+" short option)")
 		desc = "Reinstalls target atoms and their entire deep " + \
 			"dependency tree, as though no packages are currently " + \
@@ -506,6 +525,15 @@ def help(myopts, havecolor=1):
 		print("       "+green("--onlydeps")+" ("+green("-o")+" short option)")
 		print("              Only merge (or pretend to merge) the dependencies of the")
 		print("              specified packages, not the packages themselves.")
+		print()
+		print("       " + green("--package-moves") + "[=%s]" % turquoise("n"))
+		desc = "Perform package moves when necessary. This option " + \
+			"is enabled by default. WARNING: This option " + \
+			"should remain enabled under normal circumstances. " + \
+			"Do not disable it unless you know what you are " + \
+			"doing."
+		for line in wrap(desc, desc_width):
+			print(desc_indent + line)
 		print()
 		print("       "+green("--pretend")+" ("+green("-p")+" short option)")
 		print("              Instead of actually performing the merge, simply display what")
